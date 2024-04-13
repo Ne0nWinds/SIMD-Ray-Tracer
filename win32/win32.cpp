@@ -1,4 +1,4 @@
-#include "base.h"
+#include "..\base.h"
 
 #define WIN32_LEAN_AND_MEAN 1
 #define _UNICODE
@@ -57,6 +57,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 #undef CreateWindow
 void CreateWindow(const string8 &Title, u32 WindowWidth, u32 WindowHeight) {
     memory_arena ScratchArena = Temp.CreateScratch();
+    (void)ScratchArena;
 
     HMODULE HInstance = GetModuleHandle(0);
     // wchar_t *WindowTitle = WideStringFromString8(Title);

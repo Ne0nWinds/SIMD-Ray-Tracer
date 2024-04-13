@@ -1,16 +1,14 @@
 #pragma once
-
-#include <immintrin.h>
+#include "base.h"
+#include <wasm_simd128.h>
 
 #define MATHCALL static inline constexpr
 
 MATHCALL u32 PopCount(u32 a) {
-	u32 Result = _mm_popcnt_u32(a);
-	return Result;
+    return __builtin_popcount(a);
 }
 MATHCALL u64 PopCount(u64 a) {
-	u64 Result = _mm_popcnt_u64(a);
-	return Result;
+    return __builtin_popcount(a);
 }
 
 MATHCALL u32 RoundUpPowerOf2(u32 Value, u32 Power2) {

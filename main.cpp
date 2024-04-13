@@ -1,7 +1,6 @@
 
 #include "base.h"
 
-static window_handle WindowHandle;
 static u32 Width = 1280;
 static u32 Height = 720;
 
@@ -17,6 +16,7 @@ s32 AppMain() {
 
     while (!WindowShouldClose()) {
         memory_arena Scratch = Temp.CreateScratch();
+        (void)Scratch;
         // image Image = CreateImage(&Scratch, Width, Height, format::R32B32G32A32_F32);
 
         // v4 *ImageData = (v4 *)Image.Data;

@@ -57,9 +57,8 @@ struct string8 {
     #define CPU_X64
 #elif defined(__arm__) | defined(_M_ARM)
     #define CPU_ARM
-#elif defined(__WASM__)
-    #define CPU_WASM
 #endif
+// NOTE: CPU_WASM must be defined manually
 
 #if defined(PLATFORM_WIN32)
     #define Break() __debugbreak()

@@ -17,3 +17,5 @@ void * __cdecl memcpy(void *dst, const void *src, unsigned long long count) {
 	}
 	return dst;
 }
+
+int _fltused = 0x9875;

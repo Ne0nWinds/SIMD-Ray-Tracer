@@ -21,6 +21,8 @@ struct string8 {
     char8 *Data;
     u32 Size;
 
+    constexpr string8() : Data(0), Size(0) { };
+
     constexpr string8(const char8 *Str) :
         Data(const_cast<char8 *>(Str)),
         Size(0) {
@@ -85,12 +87,20 @@ struct memory_arena {
 };
 memory_arena AllocateArenaFromOS(u32 Size, u64 StartingAddress = 0);
 
-extern memory_arena Temp;
-
 enum class format : u32 {
     R32B32G32A32_F32 = 0x1,
     R8G8B8A8_U32,
 };
+static constexpr u32 GetFormatSizeInBytes(format Format) {
+    switch (Format) {
+        case format::R32B32G32A32_F32: {
+            return 16;
+        }
+        case format::R8G8B8A8_U32: {
+            return 4;
+        }
+    }
+}
 
 struct image {
     void *Data;
@@ -98,18 +108,34 @@ struct image {
     format Format;
 };
 
-image CreateImage(memory_arena *Arena, u32 Width, u32 Height, format Format);
+static image CreateImage(memory_arena *Arena, u32 Width, u32 Height, format Format) {
+    image Result = {0};
+    Result.Data = Arena->Push(Width * Height * GetFormatSizeInBytes(Format));
+    Result.Width = Width;
+    Result.Height = Height;
+    Result.Format = Format;
+    return Result;
+}
 
 struct window_handle {
     u64 Handle;
 };
 
-s32 AppMain();
-void CreateWindow(const string8 &Title, u32 WindowWidth, u32 WindowHeight);
-bool WindowShouldClose();
-void BlitImage(image Image);
+struct init_params {
+    u32 WindowWidth, WindowHeight;
+    string8 WindowTitle;
+};
+
+void OnInit(init_params *Params);
+void OnRender(const image &Image);
 
 /* == Math == */
+struct v2;
+struct v3;
+struct v4;
+struct v2x;
+struct v3x;
+struct v4x;
 #if defined(CPU_X64)
     #include "x64_math.h"
 #elif defined(CPU_ARM)

@@ -1,14 +1,39 @@
 #include "..\base.h"
 
 #define WIN32_LEAN_AND_MEAN 1
-#define _UNICODE
+#define UNICODE
 #include <Windows.h>
 
-memory_arena Temp;
+#include <gl/GL.h>
 
-static u64 AllocationGranularity = 0;
-static u64 NumberOfCPUs = 0;
+static memory_arena Temp;
+
+static u32 WindowWidth = 1280;
+static u32 WindowHeight = 720;
+static u32 GLTextureHandle;
+static HDC DeviceContext;
+
+static u64 AllocationGranularity;
+static u64 NumberOfCPUs;
 static LARGE_INTEGER PerformanceFrequency;
+
+static wchar_t *WideStringFromString8(const string8 &String) {
+    memory_arena Scratch = Temp.CreateScratch();
+    wchar_t *Result = 0;
+
+	s32 Length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS | MB_PRECOMPOSED, (const char *)String.Data, String.Size + 1, 0, 0);
+	if (Length == 0) goto error;
+
+	Result = (wchar_t *)Scratch.Push(sizeof(wchar_t));
+	Length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS | MB_PRECOMPOSED, (const char *)String.Data, String.Size + 1, Result, Length * sizeof(wchar_t));
+	if (Length == 0) goto error;
+
+	return Result;
+error:
+    Break();
+    return 0;
+}
+
 
 memory_arena AllocateArenaFromOS(u32 Size, u64 StartingAddress) {
     memory_arena Result = {0};
@@ -54,14 +79,33 @@ static HWND WindowHandle;
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
+void InitializeOpenGL() {
+    DeviceContext = GetDC(WindowHandle);
+    PIXELFORMATDESCRIPTOR PixelFormatDesc;
+    s32 PixelFormat = ChoosePixelFormat(DeviceContext, &PixelFormatDesc);
+    SetPixelFormat(DeviceContext, PixelFormat, &PixelFormatDesc);
+
+    HGLRC OpenGLContext = wglCreateContext(DeviceContext);
+    Assert(OpenGLContext);
+    wglMakeCurrent(DeviceContext, OpenGLContext);
+
+    glEnable(GL_TEXTURE_2D);
+    glDisable(GL_LIGHTING);
+    glViewport(0, 0, WindowWidth, WindowHeight);
+
+    glGenTextures(1, &GLTextureHandle);
+    glBindTexture(GL_TEXTURE_2D, GLTextureHandle);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+
+}
+
 #undef CreateWindow
 void CreateWindow(const string8 &Title, u32 WindowWidth, u32 WindowHeight) {
-    memory_arena ScratchArena = Temp.CreateScratch();
-    (void)ScratchArena;
-
     HMODULE HInstance = GetModuleHandle(0);
-    // wchar_t *WindowTitle = WideStringFromString8(Title);
-    wchar_t *WindowTitle = L"Test";
+    wchar_t *WindowTitle = WideStringFromString8(Title);
 
     {
         WNDCLASSW WindowClass = {0};
@@ -70,10 +114,9 @@ void CreateWindow(const string8 &Title, u32 WindowWidth, u32 WindowHeight) {
         WindowClass.lpszClassName = WindowTitle;
         WindowClass.style = CS_HREDRAW | CS_VREDRAW;
         RegisterClassW(&WindowClass);
-    }
 
-    DWORD WindowStyle = WS_OVERLAPPEDWINDOW;
-    {
+        DWORD WindowStyle = WS_OVERLAPPEDWINDOW;
+
         RECT WindowSize = {0};
         WindowSize.right = (LONG)WindowWidth;
         WindowSize.bottom = (LONG)WindowHeight;
@@ -92,12 +135,6 @@ void CreateWindow(const string8 &Title, u32 WindowWidth, u32 WindowHeight) {
         );
         Assert(WindowHandle != NULL);
     }
-
-    {
-        BOOL Success = QueryPerformanceFrequency(&PerformanceFrequency);
-        Assert(Success);
-        (void)Success;
-    }
 }
 
 static bool ShouldWindowClose = false;
@@ -110,24 +147,87 @@ bool WindowShouldClose() {
     return ShouldWindowClose;
 }
 
-[[noreturn]]
-void _AppMain() {
+static void InitOSProperties() {
     {
-        SYSTEM_INFO SystemInfo = {};
+        // CPU / OS Info
+        SYSTEM_INFO SystemInfo;
         GetSystemInfo(&SystemInfo);
         AllocationGranularity = SystemInfo.dwAllocationGranularity;
         NumberOfCPUs = SystemInfo.dwNumberOfProcessors;
         Assert(PopCount(AllocationGranularity) == 1);
+        Assert(NumberOfCPUs >= 1);
     }
 
-    u64 StartingAddress = 0;
+    {
+        // Init Memory Allocator
+        u64 StartingAddress = 0;
 #ifdef _DEBUG
-    StartingAddress = TB(0x4);
+        StartingAddress = TB(0x4); // Deterministic pointers in debug mode
 #endif
-    Temp = AllocateArenaFromOS(MB(64), StartingAddress);
+        Temp = AllocateArenaFromOS(MB(64), StartingAddress);
+    }
 
-    s32 Result = AppMain();
-    ExitProcess(Result);
+    {
+        // rdtsc / profiling
+        BOOL Success = QueryPerformanceFrequency(&PerformanceFrequency);
+        Assert(Success);
+        (void)Success;
+    }
+}
+
+[[noreturn]]
+void AppMain() {
+
+    InitOSProperties();
+
+    init_params InitParams = {0};
+    OnInit(&InitParams);
+    CreateWindow(InitParams.WindowTitle, InitParams.WindowWidth, InitParams.WindowHeight);
+    InitializeOpenGL();
+
+    while (!WindowShouldClose()) {
+        memory_arena Scratch = Temp.CreateScratch();
+        image Image = CreateImage(&Scratch, WindowWidth, WindowHeight, format::R8G8B8A8_U32);
+        OnRender(Image);
+
+        {
+            glBindTexture(GL_TEXTURE_2D, GLTextureHandle);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, Image.Width, Image.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Image.Data);
+
+            glMatrixMode(GL_TEXTURE);
+            glLoadIdentity();
+            glMatrixMode(GL_MODELVIEW);
+            glLoadIdentity();
+            glMatrixMode(GL_PROJECTION);
+            glLoadIdentity();
+
+            glBegin(GL_TRIANGLES);
+
+            glTexCoord2f(0.0f, 0.0f);
+            glVertex2f(-1.0f, -1.0f);
+
+            glTexCoord2f(1.0f, 0.0f);
+            glVertex2f(1.0f, -1.0f);
+
+            glTexCoord2f(1.0f, 1.0f);
+            glVertex2f(1.0f, 1.0f);
+
+
+            glTexCoord2f(0.0f, 0.0f);
+            glVertex2f(-1.0f, -1.0f);
+
+            glTexCoord2f(0.0f, 1.0f);
+            glVertex2f(-1.0f, 1.0f);
+
+            glTexCoord2f(1.0f, 1.0f);
+            glVertex2f(1.0f, 1.0f);
+            glEnd();
+
+            SwapBuffers(DeviceContext);
+        }
+    }
+
+    ExitProcess(0);
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -136,6 +236,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case WM_CLOSE:
         case WM_QUIT: {
             ShouldWindowClose = true;
+            return 0;
+        }
+        case WM_SIZE: {
+            UINT NewWidth = LOWORD(lParam);
+            UINT NewHeight = HIWORD(lParam);
+            WindowWidth = NewWidth;
+            WindowHeight = NewHeight;
+            glViewport(0, 0, NewWidth, NewHeight);
+            return 0;
         }
     }
     return DefWindowProc(hwnd, uMsg, wParam, lParam);

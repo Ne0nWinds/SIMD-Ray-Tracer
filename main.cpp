@@ -1,33 +1,27 @@
 
 #include "base.h"
 
-static u32 Width = 1280;
-static u32 Height = 720;
-
-void OnWindowResize(u32 NewWidth, u32 NewHeight) {
-    Width = NewWidth;
-    Height = NewHeight;
+void OnInit(init_params *Params) {
+    constexpr string8 WindowTitle = u8"Raytracing In One Weekend";
+    Params->WindowTitle = WindowTitle;
+    Params->WindowWidth = 1280;
+    Params->WindowHeight = 720;
 }
 
-s32 AppMain() {
+static u32 U32FromV4(v4 Value) {
+    u8 r = Value.x * 255.0f;
+    u8 g = Value.y * 255.0f;
+    u8 b = Value.z * 255.0f;
+    u8 a = 255;
+    return (r) | (g << 8) | (b << 16) | (a << 24);
+}
 
-    constexpr string8 WindowTitle = u8"Raytracing In One Weekend";
-    CreateWindow(WindowTitle, Width, Height);
-
-    while (!WindowShouldClose()) {
-        memory_arena Scratch = Temp.CreateScratch();
-        (void)Scratch;
-        // image Image = CreateImage(&Scratch, Width, Height, format::R32B32G32A32_F32);
-
-        // v4 *ImageData = (v4 *)Image.Data;
-        // for (u32 y = 0; y < Height; ++y) {
-        //     for (u32 x = 0; x < Height; ++x) {
-        //         ImageData[y * Width + x] = v4(1.0f, 0.0f, 0.0f, 1.0f);
-        //     }
-        // }
-
-        // BlitImage(WindowHandle, Image);
+void OnRender(const image &Image) {
+    u32 *ImageData = (u32 *)Image.Data;
+    for (u32 y = 0; y < Image.Height; ++y) {
+        for (u32 x = 0; x < Image.Width; ++x) {
+            v4 PixelValue = v4(x / (f32)Image.Width, y / (f32)Image.Height, 0.0f, 1.0f);
+            ImageData[y * Image.Width + x] = U32FromV4(PixelValue);
+        }
     }
-
-    return 0;
 }

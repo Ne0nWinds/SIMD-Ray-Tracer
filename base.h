@@ -47,20 +47,20 @@ struct string8 {
     #endif
 #endif
 
-#if defined(_WIN32)
-    #define PLATFORM_WIN32
-#elif defined(__gnu_linux__)
-    #define PLATFORM_LINUX
-#elif defined(__WASM__)
-    #define PLATFORM_WASM
-#endif
-
 #if defined(__amd64__) | defined(_M_AMD64)
     #define CPU_X64
 #elif defined(__arm__) | defined(_M_ARM)
     #define CPU_ARM
 #endif
 // NOTE: CPU_WASM must be defined manually
+
+#if defined(_WIN32)
+    #define PLATFORM_WIN32
+#elif defined(__gnu_linux__)
+    #define PLATFORM_LINUX
+#elif defined(__WASM__) | defined(CPU_WASM)
+    #define PLATFORM_WASM
+#endif
 
 #if defined(PLATFORM_WIN32)
     #define Break() __debugbreak()
@@ -130,9 +130,21 @@ void OnInit(init_params *Params);
 void OnRender(const image &Image);
 
 /* == Math == */
-struct v2;
-struct v3;
-struct v4;
+struct v2 {
+    f32 x = 0.0f, y = 0.0f;
+    constexpr inline v2(f32 X);
+    constexpr inline v2(f32 X, f32 Y);
+} __attribute__((__vector_size__(8), __aligned__(8)));
+struct v3 {
+    f32 x = 0.0f, y = 0.0f, z = 0.0f;
+    constexpr inline v3(f32 X);
+    constexpr inline v3(f32 X, f32 Y, f32 Z);
+} __attribute__((__vector_size__(12), __aligned__(16)));
+struct alignas(16) v4 {
+    f32 x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f;
+    constexpr inline v4(f32 X);
+    constexpr inline v4(f32 X, f32 Y, f32 Z, f32 W);
+} __attribute__((__vector_size__(16), __aligned__(16)));
 struct v2x;
 struct v3x;
 struct v4x;

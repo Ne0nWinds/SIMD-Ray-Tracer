@@ -164,7 +164,7 @@ static void InitOSProperties() {
 #ifdef _DEBUG
         StartingAddress = TB(0x4); // Deterministic pointers in debug mode
 #endif
-        Temp = AllocateArenaFromOS(MB(64), StartingAddress);
+        Temp = AllocateArenaFromOS(MB(256), StartingAddress);
     }
 
     {

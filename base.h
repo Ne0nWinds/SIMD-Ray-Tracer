@@ -129,25 +129,76 @@ struct init_params {
 void OnInit(init_params *Params);
 void OnRender(const image &Image);
 
+#define MATHCALL static inline constexpr
+
 /* == Math == */
 struct v2 {
     f32 x = 0.0f, y = 0.0f;
+    constexpr inline v2() { };
     constexpr inline v2(f32 X);
     constexpr inline v2(f32 X, f32 Y);
+
+    MATHCALL f32 Dot(const v2 &A, const v2 &B);
+    MATHCALL f32 LengthSquared(const v2 &Value);
+    MATHCALL f32 Length(const v2 &Value);
+    MATHCALL v2 Normalize(const v2 &Value);
 } __attribute__((__vector_size__(8), __aligned__(8)));
+MATHCALL v2 operator+(const v2 &A, const v2 &B);
+MATHCALL v2 operator-(const v2 &A, const v2 &B);
+MATHCALL v2 operator*(const v2 &A, const v2 &B);
+MATHCALL v2 operator/(const v2 &A, const v2 &B);
+
 struct v3 {
     f32 x = 0.0f, y = 0.0f, z = 0.0f;
+    constexpr inline v3() { };
     constexpr inline v3(f32 X);
     constexpr inline v3(f32 X, f32 Y, f32 Z);
+
+    constexpr static inline f32 Dot(const v3 &A, const v3 &B);
+    constexpr static inline f32 LengthSquared(const v3 &Value);
+    constexpr static inline f32 Length(const v3 &Value);
+    constexpr static inline v3 Normalize(const v3 &Value);
+    constexpr static inline v3 Cross(const v3 &A, const v3 &B);
 } __attribute__((__vector_size__(12), __aligned__(16)));
+MATHCALL v3 operator+(const v3 &A, const v3 &B);
+MATHCALL v3 operator-(const v3 &A, const v3 &B);
+MATHCALL v3 operator*(const v3 &A, const v3 &B);
+MATHCALL v3 operator/(const v3 &A, const v3 &B);
+
 struct alignas(16) v4 {
     f32 x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f;
+    constexpr inline v4() { };
     constexpr inline v4(f32 X);
     constexpr inline v4(f32 X, f32 Y, f32 Z, f32 W);
+
+    MATHCALL f32 Dot(const v4 &A, const v4 &B);
+    MATHCALL f32 LengthSquared(const v4 &Value);
+    MATHCALL f32 Length(const v4 &Value);
+    MATHCALL v4 Normalize(const v4 &Value);
 } __attribute__((__vector_size__(16), __aligned__(16)));
+MATHCALL v4 operator+(const v4 &A, const v4 &B);
+MATHCALL v4 operator-(const v4 &A, const v4 &B);
+MATHCALL v4 operator*(const v4 &A, const v4 &B);
+MATHCALL v4 operator/(const v4 &A, const v4 &B);
+
 struct v2x;
 struct v3x;
 struct v4x;
+
+MATHCALL f32 Sqrt(f32 Value);
+MATHCALL f32 Max(f32 A, f32 B);
+MATHCALL f32 Min(f32 A, f32 B);
+MATHCALL f32 Negate(f32 Value);
+MATHCALL f32 Sign(f32 Value);
+MATHCALL f32 Reciprocal(f32 Value);
+MATHCALL f32 Saturate(f32 Value);
+
+static constexpr f32 F32Epsilon = 1e-5f;
+static constexpr f32 F32Min = 1e-30f;
+static constexpr f32 F32Max = 1e30f;
+static constexpr f32 PI32 = 3.14159265358979323846f;
+static constexpr u32 F32SignBit = 0x8000'0000;
+
 #if defined(CPU_X64)
     #include "x64_math.h"
 #elif defined(CPU_ARM)

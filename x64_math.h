@@ -29,6 +29,41 @@ union xmm {
     }
 };
 
+MATHCALL f32 Sqrt(f32 Value) {
+    xmm Result = _mm_sqrt_ss(xmm(Value));
+    return (f32)Result;
+}
+MATHCALL f32 Max(f32 A, f32 B) {
+    xmm Result = _mm_max_ss(xmm(A), xmm(B));
+    return (f32)Result;
+}
+MATHCALL f32 Min(f32 A, f32 B) {
+    xmm Result = _mm_min_ss(xmm(A), xmm(B));
+    return (f32)Result;
+}
+MATHCALL f32 Negate(f32 Value) {
+    xmm SignBit = xmm(F32SignBit);
+    xmm Result = _mm_xor_ps(SignBit, xmm(Value));
+    return (f32)Result;
+}
+MATHCALL f32 Sign(f32 Value) {
+    xmm Result = 1.0f;
+    Result = _mm_or_ps(Result, xmm(F32SignBit));
+    return (f32)Result;
+}
+MATHCALL f32 Reciprocal(f32 Value) {
+    xmm Result = _mm_rcp_ss(xmm(Value));
+    return (f32)Result;
+}
+MATHCALL f32 Saturate(f32 Value) {
+    if (Value < 0.0f) return 0.0f;
+    if (Value > 1.0f) return 1.0f;
+    return Value;
+}
+MATHCALL f32 FMA(f32 A, f32 B, f32 C) {
+    return 0.0f;
+}
+
 constexpr inline v2::v2(f32 X) {
     xmm xmm0 = _mm_broadcastss_ps(xmm(X));
     *this = (v2)xmm0;
@@ -165,36 +200,4 @@ MATHCALL v3 operator*(const v3 &A, const v3 &B) {
 MATHCALL v3 operator/(const v3 &A, const v3 &B) {
     xmm Result = _mm_div_ps(xmm(A), xmm(B));
     return (v3)Result;
-}
-
-MATHCALL f32 Sqrt(f32 Value) {
-    xmm Result = _mm_sqrt_ss(xmm(Value));
-    return (f32)Result;
-}
-MATHCALL f32 Max(f32 A, f32 B) {
-    xmm Result = _mm_max_ss(xmm(A), xmm(B));
-    return (f32)Result;
-}
-MATHCALL f32 Min(f32 A, f32 B) {
-    xmm Result = _mm_min_ss(xmm(A), xmm(B));
-    return (f32)Result;
-}
-MATHCALL f32 Negate(f32 Value) {
-    xmm SignBit = xmm(F32SignBit);
-    xmm Result = _mm_xor_ps(SignBit, xmm(Value));
-    return (f32)Result;
-}
-MATHCALL f32 Sign(f32 Value) {
-    xmm Result = 1.0f;
-    Result = _mm_or_ps(Result, xmm(F32SignBit));
-    return (f32)Result;
-}
-MATHCALL f32 Reciprocal(f32 Value) {
-    xmm Result = _mm_rcp_ss(xmm(Value));
-    return (f32)Result;
-}
-MATHCALL f32 Saturate(f32 Value) {
-    if (Value < 0.0f) return 0.0f;
-    if (Value < 1.0f) return 1.0f;
-    return Value;
 }

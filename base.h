@@ -185,14 +185,6 @@ struct v2x;
 struct v3x;
 struct v4x;
 
-MATHCALL f32 Sqrt(f32 Value);
-MATHCALL f32 Max(f32 A, f32 B);
-MATHCALL f32 Min(f32 A, f32 B);
-MATHCALL f32 Negate(f32 Value);
-MATHCALL f32 Sign(f32 Value);
-MATHCALL f32 Reciprocal(f32 Value);
-MATHCALL f32 Saturate(f32 Value);
-
 static constexpr f32 F32Epsilon = 1e-5f;
 static constexpr f32 F32Min = 1e-30f;
 static constexpr f32 F32Max = 1e30f;

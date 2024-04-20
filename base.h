@@ -39,6 +39,9 @@ struct string8 {
 };
 
 /* == Macros == */
+
+#define array_len(arr) (sizeof(arr) / sizeof(*arr)) 
+
 #ifndef SIMD_WIDTH
     #if defined(__AVX2__)
         #define SIMD_WIDTH 8
@@ -164,6 +167,19 @@ MATHCALL v3 operator+(const v3 &A, const v3 &B);
 MATHCALL v3 operator-(const v3 &A, const v3 &B);
 MATHCALL v3 operator*(const v3 &A, const v3 &B);
 MATHCALL v3 operator/(const v3 &A, const v3 &B);
+
+MATHCALL void operator+=(v3 &A, const v3 &B) {
+    A = A + B;
+}
+MATHCALL void operator-=(v3 &A, const v3 &B) {
+    A = A - B;
+}
+MATHCALL void operator*=(v3 &A, const v3 &B) {
+    A = A * B;
+}
+MATHCALL void operator/=(v3 &A, const v3 &B) {
+    A = A / B;
+}
 
 struct alignas(16) v4 {
     f32 x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f;

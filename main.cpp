@@ -40,9 +40,23 @@ void OnRender(const image &Image) {
     v3 CameraY = v3::Normalize(v3::Cross(CameraZ, CameraX));
     v3 FilmCenter = Origin - CameraZ;
 
-    sphere Sphere = {
-        .Position = v3(0, 0, -15.0f),
-        .Radius = 2.0f
+    sphere Spheres[] = {
+        {
+            .Position = v3(0, 0, -15.0f),
+            .Radius = 2.0f
+        },
+        {
+            .Position = v3(-5, 0, -25.0f),
+            .Radius = 2.0f
+        },
+        {
+            .Position = v3(5, 2, -25.0f),
+            .Radius = 2.0f
+        },
+        {
+            .Position = v3(6, -6, -18.0f),
+            .Radius = 2.0f
+        },
     };
 
     f32 FilmW = 1.0f;
@@ -65,13 +79,29 @@ void OnRender(const image &Image) {
             v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
             v3 RayDirection = v3::Normalize(FilmP - Origin);
 
-            f32 t = v3::Dot(Sphere.Position, RayDirection);
-            v3 ProjectedPoint = RayDirection * t;
+            v3 C = v3();
+            f32 MinT = F32Max;
 
-            f32 DistanceFromCenter = v3::Length(Sphere.Position - ProjectedPoint);
-            if (DistanceFromCenter > Sphere.Radius) continue;
+            for (u32 i = 0; i < array_len(Spheres); ++i) {
+                sphere Sphere = Spheres[i];
+                f32 T = v3::Dot(Sphere.Position, RayDirection);
+                v3 ProjectedPoint = RayDirection * T;
 
-            v4 Color = v4(1.0f);
+                f32 Radius = Sphere.Radius;
+                f32 DistanceFromCenter = v3::Length(Sphere.Position - ProjectedPoint);
+                if (DistanceFromCenter > Radius) continue;
+                if (T > MinT) continue;
+                MinT = T;
+                f32 X = Sqrt(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
+
+                v3 IntersectionPoint = RayDirection * (T - X);
+                v3 Normal = v3::Normalize(IntersectionPoint - Sphere.Position);
+                Normal += 1.0f;
+                Normal *= 0.5f;
+                C = Normal;
+            }
+
+            v4 Color = v4(C.x, C.y, C.z, 1.0f);
             Pixel = U32FromV4(Color);
         }
     }

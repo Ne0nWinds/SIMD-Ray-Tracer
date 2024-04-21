@@ -44,11 +44,10 @@ struct string8 {
 
 #ifndef SIMD_WIDTH
     #if defined(__AVX2__)
-        #undef SIMD_WIDTH
         #define SIMD_WIDTH 8
-    #endif
-    #if defined(CPU_WASM)
-        #undef SIMD_WIDTH
+    #elif defined(__SSE2__)
+        #define SIMD_WIDTH 4
+    #elif defined(CPU_WASM)
         #define SIMD_WIDTH 4
     #endif
     #ifndef SIMD_WIDTH
@@ -187,7 +186,7 @@ MATHCALL void operator/=(v3 &A, const v3 &B) {
     A = A / B;
 }
 
-struct alignas(16) v4 {
+struct v4 {
     f32 x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f;
     inline v4() { };
     inline v4(f32 X);
@@ -258,7 +257,7 @@ struct f32x4 {
     f32 Value[4];
 
     inline f32x4() { }
-    inline f32x4(f32 V) {
+    inline constexpr f32x4(f32 V) : Value() {
         for (u32 i = 0; i < array_len(Value); ++i) {
             Value[i] = V;
         }
@@ -268,12 +267,23 @@ struct f32x4 {
         Assert(Index < array_len(Value));
         return Value[Index];
     }
+
     static inline f32x4 SquareRoot(const f32x4 &A);
+    static inline f32x4 Min(const f32x4 &A, const f32x4 &B);
+    static inline f32x4 Max(const f32x4 &A, const f32x4 &B);
+    static inline f32x4 Reciprocal(const f32x4 &A);
 };
 MATHCALL f32x4 operator+(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator-(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator*(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator/(const f32x4 &A, const f32x4 &B);
+
+MATHCALL f32x4 operator>(const f32x4 &A, const f32x4 &B);
+MATHCALL f32x4 operator<(const f32x4 &A, const f32x4 &B);
+
+MATHCALL f32x4 operator&(const f32x4 &A, const f32x4 &B);
+MATHCALL f32x4 operator|(const f32x4 &A, const f32x4 &B);
+MATHCALL f32x4 operator^(const f32x4 &A, const f32x4 &B);
 
 #if SIMD_WIDTH >= 8
 
@@ -281,7 +291,7 @@ struct f32x8 {
     f32 Value[8];
 
     inline f32x8() { }
-    inline f32x8(f32 V) {
+    inline constexpr f32x8(f32 V) : Value() {
         for (u32 i = 0; i < array_len(Value); ++i) {
             Value[i] = V;
         }
@@ -292,8 +302,10 @@ struct f32x8 {
         return Value[Index];
     }
 
-    static inline f32x SquareRoot(const f32x8 &A);
-
+    static inline f32x8 SquareRoot(const f32x8 &A);
+    static inline f32x8 Min(const f32x8 &A, const f32x8 &B);
+    static inline f32x8 Max(const f32x8 &A, const f32x8 &B);
+    static inline f32x8 Reciprocal(const f32x8 &A);
 } __attribute__((__vector_size__(32), __aligned__(32)));
 MATHCALL f32x8 operator+(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator-(const f32x8 &A, const f32x8 &B);
@@ -302,6 +314,10 @@ MATHCALL f32x8 operator/(const f32x8 &A, const f32x8 &B);
 
 MATHCALL f32x8 operator>(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator<(const f32x8 &A, const f32x8 &B);
+
+MATHCALL f32x8 operator&(const f32x8 &A, const f32x8 &B);
+MATHCALL f32x8 operator|(const f32x8 &A, const f32x8 &B);
+MATHCALL f32x8 operator^(const f32x8 &A, const f32x8 &B);
 
 struct v2x8 {
     f32x8 x, y;
@@ -318,6 +334,7 @@ struct v3x8 {
     f32x8 x, y, z;
 
     inline v3x8() { }
+    inline v3x8(const f32x8 &Value) : x(Value), y(Value), z(Value) { }
     inline v3x8(const v3 &Value) : x(Value.x), y(Value.y), z(Value.z) { }
 
     inline v3_reference operator[](u32 Index) {
@@ -331,6 +348,8 @@ struct v3x8 {
     }
     static inline f32x Dot(const v3x8 &A, const v3x8 &B);
     static inline f32x Length(const v3x8 &A);
+    static inline f32x LengthSquared(const v3x8 &A);
+    static inline v3x8 Normalize(const v3x8 &A);
 };
 MATHCALL v3x8 operator+(const v3x8 &A, const v3x8 &B) {
     v3x8 Result;
@@ -367,6 +386,13 @@ MATHCALL v3x8 operator/(const v3x8 &A, const v3x8 &B) {
     Result.z = A.z / B.z;
     return Result;
 }
+MATHCALL v3x8 operator&(const v3x8 &A, const v3x8 &B) {
+    v3x8 Result;
+    Result.x = A.x & B.x;
+    Result.y = A.y & B.y;
+    Result.z = A.z & B.z;
+    return Result;
+}
 struct v4x8 {
     f32x8 x, y, z, w;
     inline v4_reference operator[](u32 Index) {
@@ -398,6 +424,7 @@ struct v3x4 {
     f32x4 x, y, z;
 
     inline v3x4() { }
+    inline v3x4(const f32x4 &Value) : x(Value), y(Value), z(Value) { }
     inline v3x4(const v3 &Value) : x(Value.x), y(Value.y), z(Value.z) { }
 
     inline v3_reference operator[](u32 Index) {
@@ -412,6 +439,8 @@ struct v3x4 {
 
     static inline f32x4 Dot(const v3x4 &A, const v3x4 &B);
     static inline f32x4 Length(const v3x4 &A);
+    static inline f32x4 LengthSquared(const v3x4 &A);
+    static inline v3x4 Normalize(const v3x4 &A);
 };
 MATHCALL v3x4 operator+(const v3x4 &A, const v3x4 &B) {
     v3x4 Result;
@@ -446,6 +475,13 @@ MATHCALL v3x4 operator/(const v3x4 &A, const v3x4 &B) {
     Result.x = A.x / B.x;
     Result.y = A.y / B.y;
     Result.z = A.z / B.z;
+    return Result;
+}
+MATHCALL v3x4 operator&(const v3x4 &A, const v3x4 &B) {
+    v3x4 Result;
+    Result.x = A.x & B.x;
+    Result.y = A.y & B.y;
+    Result.z = A.z & B.z;
     return Result;
 }
 

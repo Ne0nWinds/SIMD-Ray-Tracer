@@ -107,7 +107,7 @@ void OnRender(const image &Image) {
             v3 RayDirection = v3::Normalize(FilmP - Origin);
 
             v3 C = v3();
-            f32 MinT = F32Max;
+            f32x MinT = F32Max;
 
             for (u32 i = 0; i < array_len(Spheres); ++i) {
                 const sphere_group &SphereGroup = Spheres[i];
@@ -122,6 +122,13 @@ void OnRender(const image &Image) {
 
                 if (IsZero(HitMask)) continue;
                 C = v3(0.65, 0.25, 0.25);
+
+                f32x MinMask = T > MinT;
+                MinT = f32x::Min(MinT, T);
+                f32x X = f32x::SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
+                v3x IntersectionPoint = RayDirection * (T - X);
+                v3x Normal = v3x::Normalize(IntersectionPoint - SphereGroup.Positions);
+                v3x Color = (Normal + f32x(1.0f)) * f32x(0.5f);
             }
 
             v4 Color = v4(C.x, C.y, C.z, 1.0f);

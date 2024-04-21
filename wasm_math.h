@@ -162,11 +162,31 @@ inline f32x v3x::Dot(const v3x &A, const v3x &B) {
     f32x Result = C.x + C.y + C.z;
     return Result;
 }
-
 inline f32x v3x::Length(const v3x &A) {
     f32x LengthSquared = v3x::Dot(A, A);
     f32x Length = f32x::SquareRoot(LengthSquared);
     return Length;
+}
+static inline f32x LengthSquared(const v3x &A) {
+    v3x C = A * A;
+    f32x Result = C.x + C.y + C.z;
+    return Result;
+}
+inline f32x v3x::LengthSquared(const v3x &A) {
+    v3x C = A * A;
+    f32x Result = C.x + C.y + C.z;
+    return Result;
+}
+inline v3x v3x::Normalize(const v3x &Value) {
+    f32x LengthSquared = v3x::LengthSquared(Value);
+
+    f32x LengthGreaterThanZeroMask = LengthSquared > F32Epsilon;
+
+    f32x Length = f32x::SquareRoot(LengthSquared);
+    v3x Result = Value * f32x::Reciprocal(Length);
+
+    v3x MaskedResult = Result & LengthGreaterThanZeroMask;
+    return MaskedResult;
 }
 
 MATHCALL f32x4 operator+(const f32x4 &A, const f32x4 &B) {
@@ -189,6 +209,19 @@ inline f32x4 f32x4::SquareRoot(const f32x4 &A) {
     v128 Result = wasm_f32x4_sqrt(v128(A));
     return (f32x4)Result;
 }
+inline f32x4 f32x4::Min(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_f32x4_min(v128(A), v128(B));
+    return (f32x4)Result;
+}
+inline f32x4 f32x4::Max(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_f32x4_max(v128(A), v128(B));
+    return (f32x4)Result;
+}
+inline f32x4 f32x4::Reciprocal(const f32x4 &A) {
+    v128 One = wasm_f32x4_const_splat(1.0f);
+    v128 Result = wasm_f32x4_div(v128(A), One);
+    return (f32x4)Result;
+}
 MATHCALL f32x4 operator>(const f32x4 &A, const f32x4 &B) {
     v128 Result = wasm_f32x4_gt(v128(A), v128(B));
     return (f32x4)Result;
@@ -197,9 +230,21 @@ MATHCALL f32x4 operator<(const f32x4 &A, const f32x4 &B) {
     v128 Result = wasm_f32x4_lt(v128(A), v128(B));
     return (f32x4)Result;
 }
+MATHCALL f32x4 operator&(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_v128_and(v128(A), v128(B));
+    return (f32x4)Result;
+}
+MATHCALL f32x4 operator|(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_v128_or(v128(A), v128(B));
+    return (f32x4)Result;
+}
+MATHCALL f32x4 operator^(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_v128_xor(v128(A), v128(B));
+    return (f32x4)Result;
+}
 MATHCALL bool IsZero(const f32x4 &Value) {
     v128 Zero = wasm_f32x4_const_splat(0.0f);
     v128 ComparisonResult = wasm_f32x4_ne(v128(Value), Zero);
     bool Result = wasm_v128_any_true(ComparisonResult);
-    return !Result;
+    return Result == 0;
 }

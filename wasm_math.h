@@ -2,27 +2,27 @@
 #include "base.h"
 #include <wasm_simd128.h>
 
-#define MATHCALL static inline constexpr
-
 union v128 {
     f32 Float;
     v2 Vector2;
     v3 Vector3;
     v4 Vector4;
+    f32x4 Float4;
     v128_t Register;
 
-    constexpr v128() : Register() { Register = wasm_v128_xor(Register, Register); };
-    constexpr v128(f32 Value) : Float(Value) { };
-    constexpr v128(v2 Value) : Vector2(Value) { };
-    constexpr v128(v3 Value) : Vector3(Value) { };
-    constexpr v128(v4 Value) : Vector4(Value) { };
-    constexpr v128(const v4 &Value) : Vector4(Value) { };
-    constexpr v128(const v128_t &SIMDLane) : Register(SIMDLane) { };
+    inline v128() { Register = wasm_f32x4_const_splat(0.0f); };
+    inline v128(f32 Value) : Float(Value) { };
+    inline v128(const v2 &Value) : Vector2(Value) { };
+    inline v128(const v3 &Value) : Vector3(Value) { };
+    inline v128(const f32x4 &Value) : Float4(Value) { };
+    inline v128(const v4 &Value) : Vector4(Value) { };
+    inline v128(const v128_t &SIMDLane) : Register(SIMDLane) { };
 
     explicit operator f32() const { return Float; }
     explicit operator v2() const { return Vector2; }
     explicit operator v3() const { return Vector3; }
     explicit operator v4() const { return Vector4; }
+    explicit operator f32x4() const { return Float4; }
     operator v128_t() const { return Register; }
 
     MATHCALL v128 CreateMask(bool Value) {
@@ -60,27 +60,27 @@ MATHCALL f32 FMA(f32 A, f32 B, f32 C) {
     return 0.0f;
 }
 
-constexpr inline v2::v2(f32 X) {
+inline v2::v2(f32 X) {
     v128 Value = wasm_f32x4_splat(X);
     *this = (v2)Value;
 }
-constexpr inline v3::v3(f32 X) {
+inline v3::v3(f32 X) {
     v128 Value = wasm_f32x4_splat(X);
     *this = (v3)Value;
 }
-constexpr inline v4::v4(f32 X) {
+inline v4::v4(f32 X) {
     v128 Value = wasm_f32x4_splat(X);
     *this = (v4)Value;
 }
-constexpr inline v2::v2(f32 X, f32 Y) {
+inline v2::v2(f32 X, f32 Y) {
     v128 Value = wasm_f32x4_make(X, Y, 0.0f, 0.0f);
     *this = (v2)Value;
 }
-constexpr inline v3::v3(f32 X, f32 Y, f32 Z) {
+inline v3::v3(f32 X, f32 Y, f32 Z) {
     v128 Value = wasm_f32x4_make(X, Y, Z, 0.0f);
     *this = (v3)Value;
 }
-constexpr inline v4::v4(f32 X, f32 Y, f32 Z, f32 W) {
+inline v4::v4(f32 X, f32 Y, f32 Z, f32 W) {
     v128 Value = wasm_f32x4_make(X, Y, Z, W);
     *this = (v4)Value;
 }
@@ -92,17 +92,17 @@ MATHCALL u64 PopCount(u64 a) {
     return __builtin_popcount(a);
 }
 
-constexpr inline f32 v3::Dot(const v3 &A, const v3 &B) {
+inline f32 v3::Dot(const v3 &A, const v3 &B) {
     v3 Mul = A * B;
     return Mul.x + Mul.y + Mul.z;
 }
-constexpr inline f32 v3::LengthSquared(const v3 &Value) {
+inline f32 v3::LengthSquared(const v3 &Value) {
     return v3::Dot(Value, Value);
 }
-constexpr inline f32 v3::Length(const v3 &Value) {
+inline f32 v3::Length(const v3 &Value) {
     return Sqrt(v3::LengthSquared(Value));
 }
-constexpr inline v3 v3::Normalize(const v3 &Value) {
+inline v3 v3::Normalize(const v3 &Value) {
     f32 LengthSquared = v3::LengthSquared(Value);
 
     bool LengthGreaterThanZero = LengthSquared > F32Epsilon;
@@ -131,7 +131,7 @@ MATHCALL v3 operator/(const v3 &A, const v3 &B) {
     return (v3)Result;
 }
 
-constexpr inline v3 v3::Cross(const v3 &A, const v3 &B) {
+inline v3 v3::Cross(const v3 &A, const v3 &B) {
     v3 Result;
     Result.x = A.y * B.z - A.z * B.y;
     Result.y = A.z * B.x - A.x * B.z;
@@ -155,4 +155,51 @@ MATHCALL u64 RoundUpPowerOf2(u64 Value, u64 Power2) {
     Result += Mask;
     Result &= ~Mask;
     return Result;
+}
+
+inline f32x v3x::Dot(const v3x &A, const v3x &B) {
+    v3x C = A * B;
+    f32x Result = C.x + C.y + C.z;
+    return Result;
+}
+
+inline f32x v3x::Length(const v3x &A) {
+    f32x LengthSquared = v3x::Dot(A, A);
+    f32x Length = f32x::SquareRoot(LengthSquared);
+    return Length;
+}
+
+MATHCALL f32x4 operator+(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_f32x4_add(v128(A), v128(B));
+    return (f32x4)Result;
+}
+MATHCALL f32x4 operator-(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_f32x4_sub(v128(A), v128(B));
+    return (f32x4)Result;
+}
+MATHCALL f32x4 operator*(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_f32x4_mul(v128(A), v128(B));
+    return (f32x4)Result;
+}
+MATHCALL f32x4 operator/(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_f32x4_div(v128(A), v128(B));
+    return (f32x4)Result;
+}
+inline f32x4 f32x4::SquareRoot(const f32x4 &A) {
+    v128 Result = wasm_f32x4_sqrt(v128(A));
+    return (f32x4)Result;
+}
+MATHCALL f32x4 operator>(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_f32x4_gt(v128(A), v128(B));
+    return (f32x4)Result;
+}
+MATHCALL f32x4 operator<(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_f32x4_lt(v128(A), v128(B));
+    return (f32x4)Result;
+}
+MATHCALL bool IsZero(const f32x4 &Value) {
+    v128 Zero = wasm_f32x4_const_splat(0.0f);
+    v128 ComparisonResult = wasm_f32x4_ne(v128(Value), Zero);
+    bool Result = wasm_v128_any_true(ComparisonResult);
+    return !Result;
 }

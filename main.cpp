@@ -79,7 +79,6 @@ static inline u32& GetPixel(const image &Image, u32 X, u32 Y) {
 #endif
 }
 
-__declspec(noinline)
 void OnRender(const image &Image) {
 
     v3 CameraZ = v3(0.0f, 0.0f, 1.0f);
@@ -122,7 +121,7 @@ void OnRender(const image &Image) {
                 f32x HitMask = DistanceFromCenter < Radius;
 
                 if (IsZero(HitMask)) continue;
-                C = v3(0.5);
+                C = v3(0.65, 0.25, 0.25);
             }
 
             v4 Color = v4(C.x, C.y, C.z, 1.0f);

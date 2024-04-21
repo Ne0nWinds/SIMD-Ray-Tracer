@@ -59,8 +59,13 @@ static void InitWASMEnvironmentProperties() {
     Temp = AllocateArenaFromOS(MB(256), 0);
 }
 
+extern "C" void _start() {
+}
+
 void WASM_EXPORT(init)() {
     InitWASMEnvironmentProperties();
+    init_params Params;
+    OnInit(&Params);
 }
 
 void *WASM_EXPORT(draw)(u32 Width, u32 Height) {

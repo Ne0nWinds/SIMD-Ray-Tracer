@@ -29,7 +29,7 @@ union xmm {
     }
 };
 
-MATHCALL f32 Sqrt(f32 Value) {
+MATHCALL f32 SquareRoot(f32 Value) {
     xmm Result = _mm_sqrt_ss(xmm(Value));
     return (f32)Result;
 }
@@ -125,7 +125,7 @@ inline f32 v2::LengthSquared(const v2 &Value) {
     return v2::Dot(Value, Value);
 }
 inline f32 v2::Length(const v2 &Value) {
-    return Sqrt(v2::LengthSquared(Value));
+    return SquareRoot(v2::LengthSquared(Value));
 }
 inline v2 v2::Normalize(const v2 &Value) {
     f32 LengthSquared = v2::LengthSquared(Value);
@@ -133,7 +133,7 @@ inline v2 v2::Normalize(const v2 &Value) {
     bool LengthGreaterThanZero = LengthSquared > F32Epsilon;
     xmm Mask = xmm::CreateMask(LengthGreaterThanZero);
 
-    f32 Length = Sqrt(LengthSquared);
+    f32 Length = SquareRoot(LengthSquared);
     v2 Result = Value * Reciprocal(Length);
 
     xmm MaskedResult = _mm_and_ps(xmm(Result), Mask);
@@ -164,7 +164,7 @@ inline f32 v3::LengthSquared(const v3 &Value) {
     return v3::Dot(Value, Value);
 }
 inline f32 v3::Length(const v3 &Value) {
-    return Sqrt(v3::LengthSquared(Value));
+    return SquareRoot(v3::LengthSquared(Value));
 }
 inline v3 v3::Normalize(const v3 &Value) {
     f32 LengthSquared = v3::LengthSquared(Value);
@@ -172,7 +172,7 @@ inline v3 v3::Normalize(const v3 &Value) {
     bool LengthGreaterThanZero = LengthSquared > F32Epsilon;
     xmm Mask = xmm::CreateMask(LengthGreaterThanZero);
 
-    f32 Length = Sqrt(LengthSquared);
+    f32 Length = SquareRoot(LengthSquared);
     v3 Result = Value * Reciprocal(Length);
 
     xmm MaskedResult = _mm_and_ps(xmm(Result), Mask);
@@ -200,6 +200,18 @@ MATHCALL v3 operator*(const v3 &A, const v3 &B) {
 MATHCALL v3 operator/(const v3 &A, const v3 &B) {
     xmm Result = _mm_div_ps(xmm(A), xmm(B));
     return (v3)Result;
+}
+
+inline f32x v3x::Dot(const v3x &A, const v3x &B) {
+    v3x C = A * B;
+    f32x Result = C.x + C.y + C.z;
+    return Result;
+}
+
+inline f32x v3x::Length(const v3x &A) {
+    f32x LengthSquared = v3x::Dot(A, A);
+    f32x Length = f32x::SquareRoot(LengthSquared);
+    return Length;
 }
 
 #if SIMD_WIDTH >= 8
@@ -230,7 +242,7 @@ MATHCALL f32x8 operator/(const f32x8 &A, const f32x8 &B) {
     ymm Result = _mm256_div_ps(ymm(A), ymm(B));
     return (f32x8)Result;
 }
-inline f32x f32x::SquareRoot(const f32x8 &A) {
+inline f32x8 f32x8::SquareRoot(const f32x8 &A) {
     ymm Result = _mm256_sqrt_ps(ymm(A));
     return (f32x8)Result;
 }

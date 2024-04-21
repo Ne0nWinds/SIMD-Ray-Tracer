@@ -44,9 +44,15 @@ struct string8 {
 
 #ifndef SIMD_WIDTH
     #if defined(__AVX2__)
+        #undef SIMD_WIDTH
         #define SIMD_WIDTH 8
-    #else
+    #endif
+    #if defined(CPU_WASM)
+        #undef SIMD_WIDTH
         #define SIMD_WIDTH 4
+    #endif
+    #ifndef SIMD_WIDTH
+        #error "SIMD_WIDTH not defined for this platform"
     #endif
 #endif
 
@@ -212,10 +218,10 @@ typedef v2 v2x;
 typedef v3 v3x;
 typedef v4 v4x;
 #elif SIMD_WIDTH == 4
-typedef f32x4 f32x;
-typedef v2x4 v2x;
-typedef v3x4 v3x;
-typedef v4x4 v4x;
+using f32x = f32x4;
+using v2x = v2x4;
+using v3x = v3x4;
+using v4x = v4x4;
 #elif SIMD_WIDTH == 8
 using f32x = f32x8;
 using v2x = v2x8;
@@ -251,10 +257,18 @@ struct v4_reference {
 struct f32x4 {
     f32 Value[4];
 
+    inline f32x4() { }
+    inline f32x4(f32 V) {
+        for (u32 i = 0; i < array_len(Value); ++i) {
+            Value[i] = V;
+        }
+    }
+
     inline f32 &operator[](u32 Index) {
         Assert(Index < array_len(Value));
         return Value[Index];
     }
+    static inline f32x4 SquareRoot(const f32x4 &A);
 };
 MATHCALL f32x4 operator+(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator-(const f32x4 &A, const f32x4 &B);
@@ -288,20 +302,7 @@ MATHCALL f32x8 operator/(const f32x8 &A, const f32x8 &B);
 
 MATHCALL f32x8 operator>(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator<(const f32x8 &A, const f32x8 &B);
-#endif
 
-struct v2x4 {
-    f32x4 x, y;
-
-    inline v2_reference operator[](u32 Index) {
-        Assert(Index < array_len(x.Value));
-        v2_reference Result = {
-            .x = x[Index],
-            .y = y[Index],
-        };
-        return Result;
-    }
-};
 struct v2x8 {
     f32x8 x, y;
     inline v2_reference operator[](u32 Index) {
@@ -309,19 +310,6 @@ struct v2x8 {
         v2_reference Result = {
             .x = x[Index],
             .y = y[Index],
-        };
-        return Result;
-    }
-};
-struct v3x4 {
-    f32x4 x, y, z;
-
-    inline v3_reference operator[](u32 Index) {
-        Assert(Index < array_len(x.Value));
-        v3_reference Result = {
-            .x = x[Index],
-            .y = y[Index],
-            .z = z[Index],
         };
         return Result;
     }
@@ -379,6 +367,87 @@ MATHCALL v3x8 operator/(const v3x8 &A, const v3x8 &B) {
     Result.z = A.z / B.z;
     return Result;
 }
+struct v4x8 {
+    f32x8 x, y, z, w;
+    inline v4_reference operator[](u32 Index) {
+        Assert(Index < array_len(x.Value));
+        v4_reference Result = {
+            .x = x[Index],
+            .y = y[Index],
+            .z = z[Index],
+            .w = w[Index]
+        };
+        return Result;
+    }
+};
+#endif
+
+struct v2x4 {
+    f32x4 x, y;
+
+    inline v2_reference operator[](u32 Index) {
+        Assert(Index < array_len(x.Value));
+        v2_reference Result = {
+            .x = x[Index],
+            .y = y[Index],
+        };
+        return Result;
+    }
+};
+struct v3x4 {
+    f32x4 x, y, z;
+
+    inline v3x4() { }
+    inline v3x4(const v3 &Value) : x(Value.x), y(Value.y), z(Value.z) { }
+
+    inline v3_reference operator[](u32 Index) {
+        Assert(Index < array_len(x.Value));
+        v3_reference Result = {
+            .x = x[Index],
+            .y = y[Index],
+            .z = z[Index],
+        };
+        return Result;
+    }
+
+    static inline f32x4 Dot(const v3x4 &A, const v3x4 &B);
+    static inline f32x4 Length(const v3x4 &A);
+};
+MATHCALL v3x4 operator+(const v3x4 &A, const v3x4 &B) {
+    v3x4 Result;
+    Result.x = A.x + B.x;
+    Result.y = A.y + B.y;
+    Result.z = A.z + B.z;
+    return Result;
+}
+MATHCALL v3x4 operator-(const v3x4 &A, const v3x4 &B) {
+    v3x4 Result;
+    Result.x = A.x - B.x;
+    Result.y = A.y - B.y;
+    Result.z = A.z - B.z;
+    return Result;
+}
+MATHCALL v3x4 operator*(const v3x4 &A, const v3x4 &B) {
+    v3x4 Result;
+    Result.x = A.x * B.x;
+    Result.y = A.y * B.y;
+    Result.z = A.z * B.z;
+    return Result;
+}
+MATHCALL v3x4 operator*(const v3x4 &A, const f32x4 &B) {
+    v3x4 Result;
+    Result.x = A.x * B;
+    Result.y = A.y * B;
+    Result.z = A.z * B;
+    return Result;
+}
+MATHCALL v3x4 operator/(const v3x4 &A, const v3x4 &B) {
+    v3x4 Result;
+    Result.x = A.x / B.x;
+    Result.y = A.y / B.y;
+    Result.z = A.z / B.z;
+    return Result;
+}
 
 struct v4x4 {
     f32x4 x, y, z, w;
@@ -393,31 +462,6 @@ struct v4x4 {
         return Result;
     }
 };
-struct v4x8 {
-    f32x8 x, y, z, w;
-    inline v4_reference operator[](u32 Index) {
-        Assert(Index < array_len(x.Value));
-        v4_reference Result = {
-            .x = x[Index],
-            .y = y[Index],
-            .z = z[Index],
-            .w = w[Index]
-        };
-        return Result;
-    }
-};
-
-inline f32x v3x::Dot(const v3x &A, const v3x &B) {
-    v3x C = A * B;
-    f32x Result = C.x + C.y + C.z;
-    return Result;
-}
-
-inline f32x v3x::Length(const v3x &A) {
-    f32x LengthSquared = v3x::Dot(A, A);
-    f32x Length = f32x::SquareRoot(LengthSquared);
-    return Length;
-}
 
 constexpr static f32 F32Epsilon = 1e-5f;
 constexpr static f32 F32Min = 1e-30f;

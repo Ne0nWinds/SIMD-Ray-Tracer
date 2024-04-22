@@ -302,22 +302,33 @@ struct f32x8 {
         return Value[Index];
     }
 
+    inline const f32 &operator[](u32 Index) const {
+        Assert(Index < array_len(Value));
+        return Value[Index];
+    }
+
     static inline f32x8 SquareRoot(const f32x8 &A);
     static inline f32x8 Min(const f32x8 &A, const f32x8 &B);
     static inline f32x8 Max(const f32x8 &A, const f32x8 &B);
     static inline f32x8 Reciprocal(const f32x8 &A);
+    static inline void ConditionalMove(f32x8 *A, const f32x8 &B, const f32x8 &MoveMask);
+    static inline f32 HorizontalMin(const f32x &A);
+    static inline u32 HorizontalMinIndex(const f32x &A);
 } __attribute__((__vector_size__(32), __aligned__(32)));
 MATHCALL f32x8 operator+(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator-(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator*(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator/(const f32x8 &A, const f32x8 &B);
 
+MATHCALL f32x8 operator==(const f32x8 &A, const f32x8 &B);
+MATHCALL f32x8 operator!=(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator>(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator<(const f32x8 &A, const f32x8 &B);
 
 MATHCALL f32x8 operator&(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator|(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator^(const f32x8 &A, const f32x8 &B);
+MATHCALL f32x8 operator~(const f32x8 &A);
 
 struct v2x8 {
     f32x8 x, y;
@@ -333,7 +344,7 @@ struct v2x8 {
 struct v3x8 {
     f32x8 x, y, z;
 
-    inline v3x8() { }
+    inline v3x8(const f32 &&Value = 0.0f) : x(Value), y(Value), z(Value) { }
     inline v3x8(const f32x8 &Value) : x(Value), y(Value), z(Value) { }
     inline v3x8(const v3 &Value) : x(Value.x), y(Value.y), z(Value.z) { }
 
@@ -350,6 +361,7 @@ struct v3x8 {
     static inline f32x Length(const v3x8 &A);
     static inline f32x LengthSquared(const v3x8 &A);
     static inline v3x8 Normalize(const v3x8 &A);
+    static inline void ConditionalMove(v3x8 *A, const v3x8 &B, const f32x8 &MoveMask);
 };
 MATHCALL v3x8 operator+(const v3x8 &A, const v3x8 &B) {
     v3x8 Result;
@@ -370,13 +382,6 @@ MATHCALL v3x8 operator*(const v3x8 &A, const v3x8 &B) {
     Result.x = A.x * B.x;
     Result.y = A.y * B.y;
     Result.z = A.z * B.z;
-    return Result;
-}
-MATHCALL v3x8 operator*(const v3x8 &A, const f32x &B) {
-    v3x8 Result;
-    Result.x = A.x * B;
-    Result.y = A.y * B;
-    Result.z = A.z * B;
     return Result;
 }
 MATHCALL v3x8 operator/(const v3x8 &A, const v3x8 &B) {

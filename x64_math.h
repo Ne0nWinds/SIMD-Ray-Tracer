@@ -26,8 +26,10 @@ union xmm {
     operator __m128() const { return Register; }
 
     static inline xmm CreateMask(bool Value) {
-        xmm Zero = xmm();
-        xmm Result = (Value) ? xmm(_mm_cmpeq_ps(Zero, Zero)) : Zero;
+        u32 Mask = Value * - 1;
+        f32 MaskAsFloat;
+        __builtin_memcpy(&MaskAsFloat, &Mask, sizeof(f32));
+        xmm Result = _mm_set1_ps(MaskAsFloat);
         return Result;
     }
 };
@@ -67,20 +69,6 @@ MATHCALL f32 FMA(f32 A, f32 B, f32 C) {
     return 0.0f;
 }
 
-#if defined(__AVX2__)
-inline v2::v2(f32 X) {
-    xmm xmm0 = _mm_broadcastss_ps(xmm(X));
-    *this = (v2)xmm0;
-}
-inline v3::v3(f32 X) {
-    xmm xmm0 = _mm_broadcastss_ps(xmm(X));
-    *this = (v3)xmm0;
-}
-inline v4::v4(f32 X) {
-    xmm xmm0 = _mm_broadcastss_ps(xmm(X));
-    *this = (v4)xmm0;
-}
-#else
 inline v2::v2(f32 X) {
     xmm xmm0 = _mm_set1_ps(X);
     *this = (v2)xmm0;
@@ -93,7 +81,7 @@ inline v4::v4(f32 X) {
     xmm xmm0 = _mm_set1_ps(X);
     *this = (v4)xmm0;
 }
-#endif
+
 inline v2::v2(f32 X, f32 Y) {
     xmm xmm0 = _mm_set_ps(0.0f, 0.0f, Y, X);
     *this = (v2)xmm0;
@@ -257,6 +245,11 @@ inline v3x v3x::Normalize(const v3x &Value) {
     v3x MaskedResult = Result & LengthGreaterThanZeroMask;
     return MaskedResult;
 }
+inline void v3x::ConditionalMove(v3x *A, const v3x &B, const f32x &MoveMask) {
+    f32x::ConditionalMove(&A->x, B.x, MoveMask);
+    f32x::ConditionalMove(&A->y, B.y, MoveMask);
+    f32x::ConditionalMove(&A->z, B.z, MoveMask);
+}
 
 #if SIMD_WIDTH >= 8
 union ymm {
@@ -314,6 +307,25 @@ inline f32x8 f32x8::Reciprocal(const f32x8 &Value) {
     ymm Result = _mm256_rcp_ps(ymm(Value));
     return (f32x8)Result;
 }
+inline void f32x8::ConditionalMove(f32x8 *A, const f32x8 &B, const f32x8 &MoveMask) {
+    // f32x8 BlendedResult = (*A & ~MoveMask) | (B & MoveMask);
+    ymm BlendedResult = _mm256_blendv_ps(ymm(*A), ymm(B), ymm(MoveMask));
+    *A = (f32x8)BlendedResult;
+}
+inline f32 f32x8::HorizontalMin(const f32x8 &Value) {
+    xmm min = _mm256_extractf128_ps(ymm(Value), 1);
+    min = _mm_min_ps(min, _mm256_extractf128_ps(ymm(Value), 0));
+    min = _mm_min_ps(min, _mm_movehl_ps(min, min));
+    min = _mm_min_ps(min, _mm_movehdup_ps(min));
+    return _mm_cvtss_f32(min);
+}
+inline u32 f32x8::HorizontalMinIndex(const f32x8 &Value) {
+    f32 MinValue = f32x8::HorizontalMin(Value);
+    ymm Comparison = Value == f32x8(MinValue);
+    u32 MoveMask = _mm256_movemask_ps(Comparison);
+    u32 MinIndex = _tzcnt_u32(MoveMask);
+    return MinIndex;
+}
 MATHCALL f32x8 operator==(const f32x8 &A, const f32x8 &B) {
     ymm Result = _mm256_cmp_ps(ymm(A), ymm(B), _CMP_EQ_OQ);
     return (f32x8)Result;
@@ -328,6 +340,11 @@ MATHCALL f32x8 operator>(const f32x8 &A, const f32x8 &B) {
 }
 MATHCALL f32x8 operator<(const f32x8 &A, const f32x8 &B) {
     ymm Result = _mm256_cmp_ps(ymm(A), ymm(B), _CMP_LT_OQ);
+    return (f32x8)Result;
+}
+MATHCALL f32x8 operator~(const f32x8 &A) {
+    ymm Ones = _mm256_cmp_ps(ymm(), ymm(), _CMP_EQ_OQ);
+    ymm Result = _mm256_xor_ps(ymm(A), Ones);
     return (f32x8)Result;
 }
 MATHCALL bool IsZero(const f32x8 &Value) {

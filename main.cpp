@@ -106,7 +106,7 @@ void OnRender(const image &Image) {
             v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
             v3 RayDirection = v3::Normalize(FilmP - Origin);
 
-            v3 C = v3();
+            v3x OutputColor = v3x(f32x(0.0f));
             f32x MinT = F32Max;
 
             for (u32 i = 0; i < array_len(Spheres); ++i) {
@@ -121,15 +121,20 @@ void OnRender(const image &Image) {
                 f32x HitMask = DistanceFromCenter < Radius;
 
                 if (IsZero(HitMask)) continue;
-                C = v3(0.65, 0.25, 0.25);
 
-                f32x MinMask = T > MinT;
-                MinT = f32x::Min(MinT, T);
+                f32x MinMask = T < MinT;
+                f32x MoveMask = MinMask & HitMask;
+
                 f32x X = f32x::SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
                 v3x IntersectionPoint = RayDirection * (T - X);
                 v3x Normal = v3x::Normalize(IntersectionPoint - SphereGroup.Positions);
-                v3x Color = (Normal + f32x(1.0f)) * f32x(0.5f);
+                v3x Color = (Normal + 1.0f) * 0.5f;
+                f32x::ConditionalMove(&MinT, T, MoveMask);
+                v3x::ConditionalMove(&OutputColor, Color, MoveMask);
             }
+
+            u32 Index = f32x::HorizontalMinIndex(MinT);
+            const v3_reference &C = OutputColor[Index];
 
             v4 Color = v4(C.x, C.y, C.z, 1.0f);
             Pixel = U32FromV4(Color);

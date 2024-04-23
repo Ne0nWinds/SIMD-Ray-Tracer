@@ -5,7 +5,7 @@ let instance;
 
 /** @type HTMLCanvasElement */
 const canvas = document.getElementById("canvas");
-const context = canvas.getContext("2d");
+const context = canvas.getContext("2d", { alpha: false });
 
 const onDraw = (timeElapsed) => {
     const width = context.canvas.width;

@@ -291,6 +291,11 @@ MATHCALL f32x8 operator^(const f32x8 &A, const f32x8 &B) {
     ymm Result = _mm256_xor_ps(ymm(A), ymm(B));
     return (f32x8)Result;
 }
+MATHCALL f32x8 operator~(const f32x8 &A) {
+    ymm Ones = _mm256_cmp_ps(ymm(), ymm(), _CMP_EQ_OQ);
+    ymm Result = _mm256_xor_ps(ymm(A), Ones);
+    return (f32x8)Result;
+}
 inline f32x8 f32x8::SquareRoot(const f32x8 &A) {
     ymm Result = _mm256_sqrt_ps(ymm(A));
     return (f32x8)Result;
@@ -342,11 +347,6 @@ MATHCALL f32x8 operator<(const f32x8 &A, const f32x8 &B) {
     ymm Result = _mm256_cmp_ps(ymm(A), ymm(B), _CMP_LT_OQ);
     return (f32x8)Result;
 }
-MATHCALL f32x8 operator~(const f32x8 &A) {
-    ymm Ones = _mm256_cmp_ps(ymm(), ymm(), _CMP_EQ_OQ);
-    ymm Result = _mm256_xor_ps(ymm(A), Ones);
-    return (f32x8)Result;
-}
 MATHCALL bool IsZero(const f32x8 &Value) {
     ymm Zero = ymm();
     ymm ComparisonResult = _mm256_cmp_ps(ymm(Value), Zero, _CMP_NEQ_OQ);
@@ -371,6 +371,24 @@ inline f32x4 f32x4::Reciprocal(const f32x4 &A) {
     xmm Result = _mm_rcp_ps(xmm(A));
     return (f32x4)Result;
 }
+inline void f32x4::ConditionalMove(f32x4 *A, const f32x4 &B, const f32x4 &MoveMask) {
+    f32x4 BlendedResult = (*A & ~MoveMask) | (B & MoveMask);
+    *A = (f32x4)BlendedResult;
+}
+inline f32 f32x4::HorizontalMin(const f32x4 &Value) {
+    xmm min = Value;
+    min = _mm_min_ps(min, _mm_movehl_ps(min, min));
+    xmm Shuffled =  _mm_shuffle_ps(min, min, 0b00'01'00'01);
+    min = _mm_min_ps(min, Shuffled);
+    return _mm_cvtss_f32(min);
+}
+inline u32 f32x4::HorizontalMinIndex(const f32x4 &Value) {
+    f32 MinValue = f32x4::HorizontalMin(Value);
+    xmm Comparison = Value == f32x4(MinValue);
+    u32 MoveMask = _mm_movemask_ps(Comparison);
+    u32 MinIndex = _tzcnt_u32(MoveMask);
+    return MinIndex;
+}
 
 MATHCALL f32x4 operator+(const f32x4 &A, const f32x4 &B) {
     xmm Result = _mm_add_ps(xmm(A), xmm(B));
@@ -389,6 +407,14 @@ MATHCALL f32x4 operator/(const f32x4 &A, const f32x4 &B) {
     return (f32x4)Result;
 }
 
+MATHCALL f32x4 operator==(const f32x4 &A, const f32x4 &B) {
+    xmm Result = _mm_cmpeq_ps(xmm(A), xmm(B));
+    return (f32x4)Result;
+}
+MATHCALL f32x4 operator!=(const f32x4 &A, const f32x4 &B) {
+    xmm Result = _mm_cmpneq_ps(xmm(A), xmm(B));
+    return (f32x4)Result;
+}
 MATHCALL f32x4 operator>(const f32x4 &A, const f32x4 &B) {
     xmm Result = _mm_cmpgt_ps(xmm(A), xmm(B));
     return (f32x4)Result;
@@ -408,6 +434,11 @@ MATHCALL f32x4 operator|(const f32x4 &A, const f32x4 &B) {
 }
 MATHCALL f32x4 operator^(const f32x4 &A, const f32x4 &B) {
     xmm Result = _mm_xor_ps(xmm(A), xmm(B));
+    return (f32x4)Result;
+}
+MATHCALL f32x4 operator~(const f32x4 &A) {
+    xmm Ones = _mm_cmpeq_ps(xmm(), xmm());
+    xmm Result = _mm_xor_ps(xmm(A), Ones);
     return (f32x4)Result;
 }
 

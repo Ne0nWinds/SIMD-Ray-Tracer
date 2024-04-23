@@ -268,22 +268,33 @@ struct f32x4 {
         return Value[Index];
     }
 
+    inline const f32 &operator[](u32 Index) const {
+        Assert(Index < array_len(Value));
+        return Value[Index];
+    }
+
     static inline f32x4 SquareRoot(const f32x4 &A);
     static inline f32x4 Min(const f32x4 &A, const f32x4 &B);
     static inline f32x4 Max(const f32x4 &A, const f32x4 &B);
     static inline f32x4 Reciprocal(const f32x4 &A);
-};
+    static inline void ConditionalMove(f32x4 *A, const f32x4 &B, const f32x4 &MoveMask);
+    static inline f32 HorizontalMin(const f32x4 &A);
+    static inline u32 HorizontalMinIndex(const f32x4 &A);
+} __attribute__((__vector_size__(16), __aligned__(16)));
 MATHCALL f32x4 operator+(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator-(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator*(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator/(const f32x4 &A, const f32x4 &B);
 
+MATHCALL f32x4 operator==(const f32x4 &A, const f32x4 &B);
+MATHCALL f32x4 operator!=(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator>(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator<(const f32x4 &A, const f32x4 &B);
 
 MATHCALL f32x4 operator&(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator|(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator^(const f32x4 &A, const f32x4 &B);
+MATHCALL f32x4 operator~(const f32x4 &A);
 
 #if SIMD_WIDTH >= 8
 
@@ -429,6 +440,7 @@ struct v3x4 {
     f32x4 x, y, z;
 
     inline v3x4() { }
+    inline v3x4(const f32 &&Value) : x(Value), y(Value), z(Value) { }
     inline v3x4(const f32x4 &Value) : x(Value), y(Value), z(Value) { }
     inline v3x4(const v3 &Value) : x(Value.x), y(Value.y), z(Value.z) { }
 
@@ -446,6 +458,7 @@ struct v3x4 {
     static inline f32x4 Length(const v3x4 &A);
     static inline f32x4 LengthSquared(const v3x4 &A);
     static inline v3x4 Normalize(const v3x4 &A);
+    static inline void ConditionalMove(v3x4 *A, const v3x4 &B, const f32x4 &MoveMask);
 };
 MATHCALL v3x4 operator+(const v3x4 &A, const v3x4 &B) {
     v3x4 Result;
@@ -466,13 +479,6 @@ MATHCALL v3x4 operator*(const v3x4 &A, const v3x4 &B) {
     Result.x = A.x * B.x;
     Result.y = A.y * B.y;
     Result.z = A.z * B.z;
-    return Result;
-}
-MATHCALL v3x4 operator*(const v3x4 &A, const f32x4 &B) {
-    v3x4 Result;
-    Result.x = A.x * B;
-    Result.y = A.y * B;
-    Result.z = A.z * B;
     return Result;
 }
 MATHCALL v3x4 operator/(const v3x4 &A, const v3x4 &B) {

@@ -26,8 +26,7 @@ union v128 {
     operator v128_t() const { return Register; }
 
     MATHCALL v128 CreateMask(bool Value) {
-        v128 Zero = v128();
-        v128 Result = (Value) ? v128(wasm_v128_not(Zero)) : Zero;
+        v128 Result = wasm_u32x4_splat((u32)Value * -1);
         return Result;
     }
 };
@@ -183,10 +182,30 @@ inline v3x v3x::Normalize(const v3x &Value) {
     f32x LengthGreaterThanZeroMask = LengthSquared > F32Epsilon;
 
     f32x Length = f32x::SquareRoot(LengthSquared);
-    v3x Result = Value * f32x::Reciprocal(Length);
+    v3x Result = Value / Length;
 
     v3x MaskedResult = Result & LengthGreaterThanZeroMask;
     return MaskedResult;
+}
+
+inline void v3x::ConditionalMove(v3x *A, const v3x &B, const f32x &MoveMask) {
+    f32x::ConditionalMove(&A->x, B.x, MoveMask);
+    f32x::ConditionalMove(&A->y, B.y, MoveMask);
+    f32x::ConditionalMove(&A->z, B.z, MoveMask);
+}
+
+inline f32 f32x4::HorizontalMin(const f32x4 &Value) {
+    v128 UpperHalf = wasm_f32x4_make(Value[2], Value[3], 0, 0);
+    v128 Result = wasm_f32x4_min(v128(Value), UpperHalf);
+    Result = wasm_f32x4_min(Result, wasm_f32x4_make(Result.Float4[1], 0, 0, 0));
+    return (f32)Result;
+}
+inline u32 f32x4::HorizontalMinIndex(const f32x4 &Value) {
+    f32 MinValue = f32x4::HorizontalMin(Value);
+    v128 Comparison = Value == f32x4(MinValue);
+    u32 MoveMask = wasm_i32x4_bitmask(Comparison);
+    u32 Result = __builtin_ctz(MoveMask);
+    return Result;
 }
 
 MATHCALL f32x4 operator+(const f32x4 &A, const f32x4 &B) {
@@ -218,8 +237,18 @@ inline f32x4 f32x4::Max(const f32x4 &A, const f32x4 &B) {
     return (f32x4)Result;
 }
 inline f32x4 f32x4::Reciprocal(const f32x4 &A) {
-    v128 One = wasm_f32x4_const_splat(1.0f);
-    v128 Result = wasm_f32x4_div(v128(A), One);
+    return f32x4(1.0f) / A;
+}
+inline void f32x4::ConditionalMove(f32x4 *A, const f32x4 &B, const f32x4 &MoveMask) {
+    v128 Result = wasm_v128_bitselect(v128(B), v128(*A), v128(MoveMask));
+    *A = (f32x4)Result;
+}
+MATHCALL f32x4 operator==(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_f32x4_eq(v128(A), v128(B));
+    return (f32x4)Result;
+}
+MATHCALL f32x4 operator!=(const f32x4 &A, const f32x4 &B) {
+    v128 Result = wasm_f32x4_ne(v128(A), v128(B));
     return (f32x4)Result;
 }
 MATHCALL f32x4 operator>(const f32x4 &A, const f32x4 &B) {

@@ -81,6 +81,29 @@ static inline u32& GetPixel(const image &Image, u32 X, u32 Y) {
 
 void OnRender(const image &Image) {
 
+    {
+        v3 Movement = 0.0f;
+        if (IsDown(key::W) || IsDown(key::ArrowUp)) {
+            Movement.z -= 0.5f;
+        }
+        if (IsDown(key::S) || IsDown(key::ArrowDown)) {
+            Movement.z += 0.5f;
+        }
+        if (IsDown(key::D) || IsDown(key::ArrowRight)) {
+            Movement.x += 0.5f;
+        }
+        if (IsDown(key::A) || IsDown(key::ArrowLeft)) {
+            Movement.x -= 0.5f;
+        }
+        if (IsDown(key::Space)) {
+            Movement.y += 0.5f;
+        }
+        if (IsDown(key::LeftControl)) {
+            Movement.y -= 0.5f;
+        }
+        Origin += Movement;
+    }
+
     v3 CameraZ = v3(0.0f, 0.0f, 1.0f);
     v3 CameraX = v3::Normalize(v3::Cross(v3(0.0f, 1.0f, 0.0f), CameraZ));
     v3 CameraY = v3::Normalize(v3::Cross(CameraZ, CameraX));
@@ -112,22 +135,23 @@ void OnRender(const image &Image) {
             for (u32 i = 0; i < array_len(Spheres); ++i) {
                 const sphere_group &SphereGroup = Spheres[i];
 
-                f32x T = v3x::Dot(SphereGroup.Positions, RayDirection);
+                v3x SphereCenter = SphereGroup.Positions - Origin;
+                f32x T = v3x::Dot(SphereCenter, RayDirection);
                 v3x ProjectedPoint = v3x(RayDirection) * T;
 
                 const f32x &Radius = SphereGroup.Radii;
-                f32x DistanceFromCenter = v3x::Length(SphereGroup.Positions - ProjectedPoint);
+                f32x DistanceFromCenter = v3x::Length(SphereCenter - ProjectedPoint);
 
                 f32x HitMask = DistanceFromCenter < Radius;
 
                 if (IsZero(HitMask)) continue;
 
-                f32x MinMask = T < MinT;
+                f32x MinMask = (T < MinT) & T > F32Epsilon;
                 f32x MoveMask = MinMask & HitMask;
 
                 f32x X = f32x::SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
                 v3x IntersectionPoint = RayDirection * (T - X);
-                v3x Normal = v3x::Normalize(IntersectionPoint - SphereGroup.Positions);
+                v3x Normal = v3x::Normalize(IntersectionPoint - SphereCenter);
                 v3x Color = (Normal + 1.0f) * 0.5f;
                 f32x::ConditionalMove(&MinT, T, MoveMask);
                 v3x::ConditionalMove(&OutputColor, Color, MoveMask);

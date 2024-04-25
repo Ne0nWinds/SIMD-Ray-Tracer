@@ -17,6 +17,10 @@ typedef char char8;
 typedef float f32;
 typedef double f64;
 
+struct v2;
+struct v3;
+struct v4;
+
 struct string8 {
     char8 *Data;
     u32 Size;
@@ -116,6 +120,7 @@ struct image {
     format Format;
 };
 
+[[maybe_unused]]
 static image CreateImage(memory_arena *Arena, u32 Width, u32 Height, format Format) {
     image Result = {0};
     Result.Data = Arena->Push(Width * Height * GetFormatSizeInBytes(Format));
@@ -137,9 +142,165 @@ struct init_params {
 void OnInit(init_params *Params);
 void OnRender(const image &Image);
 
-#define MATHCALL static inline
+enum class key : u32 {
+    Escape = 0x1,
+	One,
+	Two,
+	Three,
+	Four,
+	Five,
+	Six,
+	Seven,
+	Eight,
+	Nine,
+	Zero,
+	Minus,
+	Plus,
+	Backspace,
+	Tab,
+	Q,
+	W,
+	E,
+	R,
+	T,
+	Y,
+	U,
+	I,
+	O,
+	P,
+	LeftBracket,
+	RightBracket,
+	Enter,
+	LeftControl,
+	A,
+	S,
+	D,
+	F,
+	G,
+	H,
+	J,
+	K,
+	L,
+	Semicolon,
+	Quote,
+	GraveAccent,
+	LeftShift,
+	Pipe,
+	Z,
+	X,
+	C,
+	V,
+	B,
+	N,
+	M,
+	Comma,
+	Period,
+	QuestionMark,
+	RightShift,
+	NumpadMultiply,
+	LeftAlt,
+	Space,
+	CapsLock,
+	F1,
+	F2,
+	F3,
+	F4,
+	F5,
+	F6,
+	F7,
+	F8,
+	F9,
+	F10,
+	Pause,
+	ScrollLock,
+	Numpad7,
+	Numpad8,
+	Numpad9,
+	NumpadMinus,
+	Numpad4,
+	Numpad5,
+	Numpad6,
+	NumpadPlus,
+	Numpad1,
+	Numpad2,
+	Numpad3,
+	Numpad0,
+	NumpadPeriod,
+	AltPrintScreen,
+	_Unused,
+	OEM10,
+	F11,
+	F12,
+	LeftWindows,
+	RightAlt,
+	RightWindows,
+	Menu,
+	RightControl,
+	Insert,
+	Home,
+	PageUp,
+	Delete,
+	End,
+	PageDown,
+	ArrowUp,
+	ArrowLeft,
+	ArrowDown,
+	ArrowRight,
+	NumLock,
+	NumpadForwardSlash,
+	NumpadEnter,
+	Count
+};
+
+enum class button : u32 {
+	DPadUp         = 1 << 0,
+	DPadDown       = 1 << 1,
+	DPadLeft       = 1 << 2,
+	DPadRight      = 1 << 3,
+	Start          = 1 << 4,
+	Back           = 1 << 5,
+	LeftThumb      = 1 << 6,
+	RightThumb     = 1 << 7,
+	LeftShoulder   = 1 << 8,
+	RightShoulder  = 1 << 9,
+	A              = 1 << 10,
+	B              = 1 << 11,
+	X              = 1 << 12,
+	Y              = 1 << 13,
+	Count
+};
+
+enum class mouse_button : u32 {
+	LeftMouseButton   = 1 << 0,
+	RightMouseButton  = 1 << 1,
+	MiddleMouseButton = 1 << 2,
+	XButton1          = 1 << 3,
+	XButton2          = 1 << 4,
+	Count
+};
+
+bool IsDown(key Key);
+bool IsUp(key Key);
+bool WasReleased(key Key);
+bool WasPressed(key Key);
+
+bool IsDown(button Button);
+bool IsUp(button Button);
+bool WasReleased(button Button);
+bool WasPressed(button Button);
+
+bool IsDown(mouse_button Button);
+bool IsUp(mouse_button Button);
+bool WasReleased(mouse_button Button);
+bool WasPressed(mouse_button Button);
+
+v2 GetAnalogInput(u32 StickIndex);
+v2 GetMouseDelta();
+v2 GetMouseWheelDelta();
 
 /* == Math == */
+#define MATHCALL static inline
+
 struct v2 {
     f32 x = 0.0f, y = 0.0f;
     inline v2() { };

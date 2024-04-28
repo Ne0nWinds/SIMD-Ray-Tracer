@@ -35,6 +35,11 @@ static constexpr inline void InitScalarSpheres(scalar_sphere *ScalarSpheres) {
     ScalarSpheres[3].Position.y = -6.0f;
     ScalarSpheres[3].Position.z = -18.0f;
     ScalarSpheres[3].Radius = 2.0f;
+
+    ScalarSpheres[4].Position.x = -7.0f;
+    ScalarSpheres[4].Position.y = -6.0f;
+    ScalarSpheres[4].Position.z = -25.0f;
+    ScalarSpheres[4].Radius = 4.0f;
 }
 
 static void ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * const Spheres, u32 ScalarLength, sphere_group *SIMDSpheres) {
@@ -98,7 +103,13 @@ void OnRender(const image &Image) {
         if (IsDown(key::Space)) {
             Movement.y += 0.5f;
         }
-        if (IsDown(key::LeftControl)) {
+
+        bool FlyDown = IsDown(key::C);
+#ifndef PLATFORM_WASM
+        // Ctrl+W will close the browser window
+        FlyDown = IsDown(key::LeftControl);
+#endif
+        if (FlyDown) {
             Movement.y -= 0.5f;
         }
         Origin += Movement;

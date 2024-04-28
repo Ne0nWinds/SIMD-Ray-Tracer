@@ -59,18 +59,87 @@ static void InitWASMEnvironmentProperties() {
     Temp = AllocateArenaFromOS(MB(256), 0);
 }
 
-extern "C" void _start() {
-}
-
 void WASM_EXPORT(init)() {
     InitWASMEnvironmentProperties();
     init_params Params;
     OnInit(&Params);
 }
 
+u64 KeyState[2] = {0};
+u64 PrevKeyState[2] = {0};
+
 void *WASM_EXPORT(draw)(u32 Width, u32 Height) {
+    PrevKeyState[0] = KeyState[0];
+    PrevKeyState[1] = KeyState[1];
+
     memory_arena Scratch = Temp.CreateScratch();
     image Image = CreateImage(&Scratch, Width, Height, format::R8G8B8A8_U32);
     OnRender(Image);
     return Image.Data;
+}
+
+void WASM_EXPORT(updateKeyState)(u32 KeyCode, u32 IsDown) {
+    bool HighBits = KeyCode >= 64;
+    if (HighBits) KeyCode -= 64;
+    u64 BitToUpdate = 1 << KeyCode;
+
+    if (IsDown > 0) {
+        KeyState[HighBits] |= BitToUpdate;
+    } else {
+        KeyState[HighBits] &= ~BitToUpdate;
+    }
+}
+
+void WASM_EXPORT(resetKeyState)() {
+    PrevKeyState[0] = 0;
+    PrevKeyState[1] = 0;
+    KeyState[0] = 0;
+    KeyState[1] = 0;
+}
+
+bool IsDown(key Key) {
+    bool HighBits = (u32)Key >= 64;
+    u64 BitToSet = (u64)Key;
+    if (HighBits) BitToSet -= 64;
+    bool Result = (KeyState[HighBits] & (1 << BitToSet)) != 0;
+    return Result;
+}
+bool IsUp(key Key) {
+    bool HighBits = (u32)Key >= 64;
+    u64 BitToSet = (u64)Key;
+    if (HighBits) BitToSet -= 64;
+    bool Result = (KeyState[HighBits] & (1 << BitToSet)) == 0;
+    return Result;
+}
+bool WasReleased(key Key) {
+    return false;
+}
+bool WasPressed(key Key) {
+    return false;
+}
+
+bool IsDown(button Button) {
+    return false;
+}
+bool IsUp(button Button) {
+    return false;
+}
+bool WasReleased(button Button) {
+    return false;
+}
+bool WasPressed(button Button) {
+    return false;
+}
+
+bool IsDown(mouse_button Button) {
+    return false;
+}
+bool IsUp(mouse_button Button) {
+    return false;
+}
+bool WasReleased(mouse_button Button) {
+    return false;
+}
+bool WasPressed(mouse_button Button) {
+    return false;
 }

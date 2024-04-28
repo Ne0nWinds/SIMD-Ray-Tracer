@@ -518,3 +518,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
+
+f64 QueryTimestampInMilliseconds() {
+    LARGE_INTEGER PerformanceCounter = {};
+    QueryPerformanceCounter(&PerformanceCounter);
+    f64 Result = (f64)PerformanceCounter.QuadPart / (PerformanceFrequency.QuadPart / 1000.0);
+    return Result;
+}

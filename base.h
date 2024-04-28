@@ -686,3 +686,6 @@ constexpr static u32 F32SignBit = 0x8000'0000;
 #else
     #error "Platform not supported"
 #endif
+
+/* == Profiling == */
+f64 QueryTimestampInMilliseconds();

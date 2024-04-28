@@ -40,6 +40,21 @@ static constexpr inline void InitScalarSpheres(scalar_sphere *ScalarSpheres) {
     ScalarSpheres[4].Position.y = -6.0f;
     ScalarSpheres[4].Position.z = -25.0f;
     ScalarSpheres[4].Radius = 4.0f;
+    
+    ScalarSpheres[5].Position.x = 7.0f;
+    ScalarSpheres[5].Position.y = 6.0f;
+    ScalarSpheres[5].Position.z = -30.0f;
+    ScalarSpheres[5].Radius = 3.0f;
+
+    ScalarSpheres[6].Position.x = -3.0f;
+    ScalarSpheres[6].Position.y = 3.0f;
+    ScalarSpheres[6].Position.z = -30.0f;
+    ScalarSpheres[6].Radius = 2.5f;
+
+    ScalarSpheres[7].Position.x = -12.0f;
+    ScalarSpheres[7].Position.y = 3.0f;
+    ScalarSpheres[7].Position.z = -45.0f;
+    ScalarSpheres[7].Radius = 1.0f;
 }
 
 static void ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * const Spheres, u32 ScalarLength, sphere_group *SIMDSpheres) {
@@ -115,6 +130,8 @@ void OnRender(const image &Image) {
         Origin += Movement;
     }
 
+    f64 StartTime = QueryTimestampInMilliseconds();
+
     v3 CameraZ = v3(0.0f, 0.0f, 1.0f);
     v3 CameraX = v3::Normalize(v3::Cross(v3(0.0f, 1.0f, 0.0f), CameraZ));
     v3 CameraY = v3::Normalize(v3::Cross(CameraZ, CameraX));
@@ -128,6 +145,7 @@ void OnRender(const image &Image) {
         FilmW = (f32)Image.Width / (f32)Image.Height;
     }
 
+#if 1
     for (u32 y = 0; y < Image.Height; ++y) {
         for (u32 x = 0; x < Image.Width; ++x) {
 
@@ -140,7 +158,7 @@ void OnRender(const image &Image) {
             v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
             v3 RayDirection = v3::Normalize(FilmP - Origin);
 
-            v3x OutputColor = v3x(f32x(0.0f));
+            v3x OutputColor = v3x(0.0f);
             f32x MinT = F32Max;
 
             for (u32 i = 0; i < array_len(Spheres); ++i) {
@@ -157,11 +175,12 @@ void OnRender(const image &Image) {
 
                 if (IsZero(HitMask)) continue;
 
-                f32x MinMask = (T < MinT) & T > F32Epsilon;
+                f32x X = f32x::SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
+                f32x IntersectionT = T - X;
+                v3x IntersectionPoint = RayDirection * IntersectionT;
+                f32x MinMask = (IntersectionT < MinT) & (IntersectionT > F32Epsilon);
                 f32x MoveMask = MinMask & HitMask;
 
-                f32x X = f32x::SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
-                v3x IntersectionPoint = RayDirection * (T - X);
                 v3x Normal = v3x::Normalize(IntersectionPoint - SphereCenter);
                 v3x Color = (Normal + 1.0f) * 0.5f;
                 f32x::ConditionalMove(&MinT, T, MoveMask);
@@ -173,27 +192,49 @@ void OnRender(const image &Image) {
 
             v4 Color = v4(C.x, C.y, C.z, 1.0f);
             Pixel = U32FromV4(Color);
-
-/*
-            for (u32 i = 0; i < array_len(Spheres); ++i) {
-                sphere Sphere = Spheres[i];
-                f32 T = v3::Dot(Sphere.Position, RayDirection);
-                v3 ProjectedPoint = RayDirection * T;
-
-                f32 Radius = Sphere.Radius;
-                f32 DistanceFromCenter = v3::Length(Sphere.Position - ProjectedPoint);
-                if (DistanceFromCenter > Radius) continue;
-                if (T > MinT) continue;
-                MinT = T;
-                f32 X = Sqrt(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
-
-                v3 IntersectionPoint = RayDirection * (T - X);
-                v3 Normal = v3::Normalize(IntersectionPoint - Sphere.Position);
-                Normal += 1.0f;
-                Normal *= 0.5f;
-                C = Normal;
-            }
-*/
         }
     }
+#else
+        for (u32 y = 0; y < Image.Height; ++y) {
+            for (u32 x = 0; x < Image.Width; ++x) {
+
+                u32 &Pixel = GetPixel(Image, x, y);
+                Pixel = U32FromV4(v4(0.0f, 0.0f, 0.0f, 1.0f));
+
+                f32 FilmX = -1.0f + (x * 2.0f) / (f32)Image.Width;
+                f32 FilmY = -1.0f + (y * 2.0f) / (f32)Image.Height;
+
+                v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
+                v3 RayDirection = v3::Normalize(FilmP - Origin);
+
+                v3 OutputColor = v3(0.0f);
+                f32 MinT = F32Max;
+                for (u32 i = 0; i < 8; ++i) {
+                    scalar_sphere Sphere = ScalarSpheres[i];
+                    v3 SphereCenter = Sphere.Position - Origin;
+                    f32 T = v3::Dot(SphereCenter, RayDirection);
+                    v3 ProjectedPoint = RayDirection * T;
+
+                    f32 Radius = Sphere.Radius;
+                    f32 DistanceFromCenter = v3::Length(SphereCenter - ProjectedPoint);
+                    if (DistanceFromCenter > Radius) continue;
+                    if (T > MinT || T < F32Epsilon) continue;
+                    MinT = T;
+                    f32 X = SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
+
+                    v3 IntersectionPoint = RayDirection * (T - X);
+                    v3 Normal = v3::Normalize(IntersectionPoint - SphereCenter);
+                    Normal += 1.0f;
+                    Normal *= 0.5f;
+                    OutputColor = Normal;
+                }
+                v4 Color = v4(OutputColor.x, OutputColor.y, OutputColor.z, 1.0f);
+                Pixel = U32FromV4(Color);
+            }
+        }
+#endif
+
+    f64 EndTime = QueryTimestampInMilliseconds();
+    volatile f64 TimeElapsed = EndTime - StartTime;
+    (void)TimeElapsed;
 }

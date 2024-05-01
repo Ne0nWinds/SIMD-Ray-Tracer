@@ -31,7 +31,12 @@ const setCanvasWidth = () => {
 setCanvasWidth();
 window.onresize = setCanvasWidth;
 
-WebAssembly.instantiateStreaming(fetch("./main.wasm"))
+WebAssembly.instantiateStreaming(fetch("./main.wasm"), {
+        "env": {
+            "__now": window.performance.now.bind(window.performance),
+            "__break": () => { debugger; }
+        }
+    })
     .then((module) => {
         instance = module.instance;
         window.instance = instance;

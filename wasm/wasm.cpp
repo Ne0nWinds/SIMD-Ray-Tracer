@@ -54,6 +54,18 @@ void memory_arena::Pop(void *Ptr) {
     this->Offset = Ptr;
 }
 
+f64 WASM_IMPORT(__now)();
+
+f64 QueryTimestampInMilliseconds() {
+    return __now();
+}
+
+void WASM_IMPORT(__break)();
+
+void __WasmBreak() {
+    __break();
+}
+
 static void InitWASMEnvironmentProperties() {
     WasmPagesAllocated = __builtin_wasm_memory_size(0);
     Temp = AllocateArenaFromOS(MB(256), 0);

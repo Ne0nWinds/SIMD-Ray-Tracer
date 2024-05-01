@@ -74,10 +74,19 @@ struct string8 {
     #define PLATFORM_WASM
 #endif
 
-#if defined(PLATFORM_WIN32)
-    #define Break() __debugbreak()
-    #define Assert(Expr) if (!(Expr)) Break()
-#else
+/* == Debugging == */
+#if defined(_DEBUG)
+    #if defined(PLATFORM_WIN32)
+        #define Break() __debugbreak()
+        #define Assert(Expr) if (!(Expr)) Break()
+    #elif defined(PLATFORM_WASM)
+        void __attribute__((import_name("__break"))) __break();
+        #define Break() __break()
+        #define Assert(Expr) if (!(Expr)) Break()
+    #endif
+#endif
+
+#ifndef _DEBUG
     #define Break()
     #define Assert(Expr)
 #endif
@@ -372,6 +381,9 @@ struct v3x8;
 struct v4x4;
 struct v4x8;
 
+struct u32x4;
+struct u32x8;
+
 #if SIMD_WIDTH == 1
 typedef f32 f32x;
 typedef v2 v2x;
@@ -382,11 +394,13 @@ using f32x = f32x4;
 using v2x = v2x4;
 using v3x = v3x4;
 using v4x = v4x4;
+using u32x = u32x4;
 #elif SIMD_WIDTH == 8
 using f32x = f32x8;
 using v2x = v2x8;
 using v3x = v3x8;
 using v4x = v4x8;
+using u32x = u32x8;
 #endif
 
 struct v2_reference {
@@ -418,11 +432,12 @@ struct f32x4 {
     f32 Value[4];
 
     inline f32x4() { }
-    inline constexpr f32x4(f32 V) : Value() {
+    inline f32x4(f32 V) {
         for (u32 i = 0; i < array_len(Value); ++i) {
             Value[i] = V;
         }
     }
+    explicit inline f32x4(const u32x4 &V);
 
     inline f32 &operator[](u32 Index) {
         Assert(Index < array_len(Value));
@@ -457,17 +472,70 @@ MATHCALL f32x4 operator|(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator^(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator~(const f32x4 &A);
 
+struct u32x4 {
+    u32 Value[4];
+
+    inline u32x4() { }
+    inline constexpr u32x4(u32 V) : Value() {
+        for (u32 i = 0; i < array_len(Value); ++i) {
+            Value[i] = V;
+        }
+    }
+
+    inline u32 &operator[](u32 Index) {
+        Assert(Index < array_len(Value));
+        return Value[Index];
+    }
+
+    inline const u32 &operator[](u32 Index) const {
+        Assert(Index < array_len(Value));
+        return Value[Index];
+    }
+} __attribute__((__vector_size__(16), __aligned__(16)));
+
+MATHCALL u32x4 operator+(const u32x4 &A, const u32x4 &B);
+MATHCALL u32x4 operator-(const u32x4 &A, const u32x4 &B);
+MATHCALL u32x4 operator*(const u32x4 &A, const u32x4 &B);
+
+MATHCALL u32x4 operator==(const u32x4 &A, const u32x4 &B);
+MATHCALL u32x4 operator!=(const u32x4 &A, const u32x4 &B);
+MATHCALL u32x4 operator>(const u32x4 &A, const u32x4 &B);
+MATHCALL u32x4 operator<(const u32x4 &A, const u32x4 &B);
+
+MATHCALL u32x4 operator&(const u32x4 &A, const u32x4 &B);
+MATHCALL u32x4 operator|(const u32x4 &A, const u32x4 &B);
+MATHCALL u32x4 operator^(const u32x4 &A, const u32x4 &B);
+MATHCALL u32x4 operator~(const u32x4 &A);
+MATHCALL u32x4 operator>>(const u32x4 &A, const u32x4 &B);
+MATHCALL u32x4 operator<<(const u32x4 &A, const u32x4 &B);
+
+MATHCALL u32x4 operator>>(const u32x4 &A, const u32 &&B);
+MATHCALL u32x4 operator<<(const u32x4 &A, const u32 &&B);
+
+MATHCALL void operator+=(u32x4 &A, const u32x4 &B) { A = A + B; }
+MATHCALL void operator-=(u32x4 &A, const u32x4 &B) { A = A - B; }
+MATHCALL void operator*=(u32x4 &A, const u32x4 &B) { A = A * B; }
+MATHCALL void operator&=(u32x4 &A, const u32x4 &B) { A = A & B; }
+MATHCALL void operator|=(u32x4 &A, const u32x4 &B) { A = A | B; }
+MATHCALL void operator^=(u32x4 &A, const u32x4 &B) { A = A ^ B; }
+MATHCALL void operator>>=(u32x4 &A, const u32x4 &B) { A = A >> B; }
+MATHCALL void operator<<=(u32x4 &A, const u32x4 &B) { A = A << B; };
+MATHCALL void operator>>=(u32x4 &A, const u32 &&B) { A = A >> B; }
+MATHCALL void operator<<=(u32x4 &A, const u32 &&B) { A = A << B; };
+
+
 #if SIMD_WIDTH >= 8
 
 struct f32x8 {
     f32 Value[8];
 
     inline f32x8() { }
-    inline constexpr f32x8(f32 V) : Value() {
+    inline f32x8(const f32 V) {
         for (u32 i = 0; i < array_len(Value); ++i) {
             Value[i] = V;
         }
     }
+    explicit inline f32x8(const u32x8 &V);
 
     inline f32 &operator[](u32 Index) {
         Assert(Index < array_len(Value));
@@ -502,6 +570,65 @@ MATHCALL f32x8 operator|(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator^(const f32x8 &A, const f32x8 &B);
 MATHCALL f32x8 operator~(const f32x8 &A);
 
+MATHCALL void operator+=(f32x8 &A, const f32x8 &B) { A = A + B; }
+MATHCALL void operator-=(f32x8 &A, const f32x8 &B) { A = A - B; }
+MATHCALL void operator*=(f32x8 &A, const f32x8 &B) { A = A * B; }
+MATHCALL void operator/=(f32x8 &A, const f32x8 &B) { A = A / B; }
+MATHCALL void operator&=(f32x8 &A, const f32x8 &B) { A = A & B; }
+MATHCALL void operator|=(f32x8 &A, const f32x8 &B) { A = A | B; }
+MATHCALL void operator^=(f32x8 &A, const f32x8 &B) { A = A ^ B; }
+
+struct u32x8 {
+    u32 Value[8];
+
+    inline u32x8() { }
+    inline constexpr u32x8(u32 V) : Value() {
+        for (u32 i = 0; i < array_len(Value); ++i) {
+            Value[i] = V;
+        }
+    }
+
+    inline u32 &operator[](u32 Index) {
+        Assert(Index < array_len(Value));
+        return Value[Index];
+    }
+
+    inline const u32 &operator[](u32 Index) const {
+        Assert(Index < array_len(Value));
+        return Value[Index];
+    }
+} __attribute__((__vector_size__(32), __aligned__(32)));
+
+MATHCALL u32x8 operator+(const u32x8 &A, const u32x8 &B);
+MATHCALL u32x8 operator-(const u32x8 &A, const u32x8 &B);
+MATHCALL u32x8 operator*(const u32x8 &A, const u32x8 &B);
+
+MATHCALL u32x8 operator==(const u32x8 &A, const u32x8 &B);
+MATHCALL u32x8 operator!=(const u32x8 &A, const u32x8 &B);
+MATHCALL u32x8 operator>(const u32x8 &A, const u32x8 &B);
+MATHCALL u32x8 operator<(const u32x8 &A, const u32x8 &B);
+
+MATHCALL u32x8 operator&(const u32x8 &A, const u32x8 &B);
+MATHCALL u32x8 operator|(const u32x8 &A, const u32x8 &B);
+MATHCALL u32x8 operator^(const u32x8 &A, const u32x8 &B);
+MATHCALL u32x8 operator~(const u32x8 &A);
+MATHCALL u32x8 operator>>(const u32x8 &A, const u32x8 &B);
+MATHCALL u32x8 operator<<(const u32x8 &A, const u32x8 &B);
+
+MATHCALL u32x8 operator>>(const u32x8 &A, const u32 &&B);
+MATHCALL u32x8 operator<<(const u32x8 &A, const u32 &&B);
+
+MATHCALL void operator+=(u32x8 &A, const u32x8 &B) { A = A + B; }
+MATHCALL void operator-=(u32x8 &A, const u32x8 &B) { A = A - B; }
+MATHCALL void operator*=(u32x8 &A, const u32x8 &B) { A = A * B; }
+MATHCALL void operator&=(u32x8 &A, const u32x8 &B) { A = A & B; }
+MATHCALL void operator|=(u32x8 &A, const u32x8 &B) { A = A | B; }
+MATHCALL void operator^=(u32x8 &A, const u32x8 &B) { A = A ^ B; }
+MATHCALL void operator>>=(u32x8 &A, const u32x8 &B) { A = A >> B; }
+MATHCALL void operator<<=(u32x8 &A, const u32x8 &B) { A = A << B; };
+MATHCALL void operator>>=(u32x8 &A, const u32 &&B) { A = A >> B; }
+MATHCALL void operator<<=(u32x8 &A, const u32 &&B) { A = A << B; };
+
 struct v2x8 {
     f32x8 x, y;
     inline v2_reference operator[](u32 Index) {
@@ -517,6 +644,7 @@ struct v3x8 {
     f32x8 x, y, z;
 
     inline v3x8(const f32 &&Value = 0.0f) : x(Value), y(Value), z(Value) { }
+    inline v3x8(const f32 &&X, const f32 &&Y, const f32 &&Z) : x(X), y(Y), z(Z) { }
     inline v3x8(const f32x8 &Value) : x(Value), y(Value), z(Value) { }
     inline v3x8(const v3 &Value) : x(Value.x), y(Value.y), z(Value.z) { }
 
@@ -542,12 +670,22 @@ MATHCALL v3x8 operator+(const v3x8 &A, const v3x8 &B) {
     Result.z = A.z + B.z;
     return Result;
 }
+MATHCALL void operator+=(v3x8 &A, const v3x8 &B) {
+    A.x += B.x;
+    A.y += B.y;
+    A.z += B.z;
+}
 MATHCALL v3x8 operator-(const v3x8 &A, const v3x8 &B) {
     v3x8 Result;
     Result.x = A.x - B.x;
     Result.y = A.y - B.y;
     Result.z = A.z - B.z;
     return Result;
+}
+MATHCALL void operator-=(v3x8 &A, const v3x8 &B) {
+    A.x -= B.x;
+    A.y -= B.y;
+    A.z -= B.z;
 }
 MATHCALL v3x8 operator*(const v3x8 &A, const v3x8 &B) {
     v3x8 Result;
@@ -556,12 +694,22 @@ MATHCALL v3x8 operator*(const v3x8 &A, const v3x8 &B) {
     Result.z = A.z * B.z;
     return Result;
 }
+MATHCALL void operator*=(v3x8 &A, const v3x8 &B) {
+    A.x *= B.x;
+    A.y *= B.y;
+    A.z *= B.z;
+}
 MATHCALL v3x8 operator/(const v3x8 &A, const v3x8 &B) {
     v3x8 Result;
     Result.x = A.x / B.x;
     Result.y = A.y / B.y;
     Result.z = A.z / B.z;
     return Result;
+}
+MATHCALL void operator/=(v3x8 &A, const v3x8 &B) {
+    A.x /= B.x;
+    A.y /= B.y;
+    A.z /= B.z;
 }
 MATHCALL v3x8 operator&(const v3x8 &A, const v3x8 &B) {
     v3x8 Result;
@@ -570,6 +718,12 @@ MATHCALL v3x8 operator&(const v3x8 &A, const v3x8 &B) {
     Result.z = A.z & B.z;
     return Result;
 }
+MATHCALL void operator&=(v3x8 &A, const v3x8 &B) {
+    A.x &= B.x;
+    A.y &= B.y;
+    A.z &= B.z;
+}
+
 struct v4x8 {
     f32x8 x, y, z, w;
     inline v4_reference operator[](u32 Index) {
@@ -686,6 +840,89 @@ constexpr static u32 F32SignBit = 0x8000'0000;
 #else
     #error "Platform not supported"
 #endif
+
+/* == Pseudo-Random Number Generators == */
+
+#define RANDOM_ALGORITHM_PCG 1
+#define RANDOM_ALGORITHM_XORSHIFT 2
+#define RANDOM_ALGORITHM_LCG 3
+
+static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_PCG;
+
+struct u32x_random_state {
+    u32x Seed;
+
+    inline u32x PCG() {
+        u32x State = this->Seed;
+        u32x Result = ((State >> ((State >> 28u) + 4u)) ^ State) * 277803737u;
+        this->Seed = State * 747796405U + 2891336453U;
+        return (Result >> 22u) ^ Result;
+    }
+    inline u32x XorShift() {
+        u32x Result = this->Seed;
+        Seed ^= Seed << 13;
+        Seed ^= Seed >> 17;
+        Seed ^= Seed << 5;
+        return Result * 0x4F6CDD1DU + 2891336453U;
+    }
+    inline u32x LCG() {
+        u32x Result = this->Seed;
+        this->Seed *= 747796405U;
+        this->Seed += 2891336453U;
+        return Result;
+    }
+    inline u32x RandomInt() {
+        switch (DefaultRandomAlgorithm) {
+            case RANDOM_ALGORITHM_PCG: return this->PCG();
+            case RANDOM_ALGORITHM_XORSHIFT: return this->XorShift();
+            case RANDOM_ALGORITHM_LCG: return this->LCG();
+        }
+    }
+    inline f32x RandomFloat(f32 Min = -1.0f, f32 Max = 1.0f) {
+        u32x N = this->RandomInt();
+        constexpr f32 InverseMaxInt = 1.0 / (f64)((u32)-1);
+        f32x RandomFloat = f32x(N) * InverseMaxInt;
+        f32x Result = RandomFloat * (Max - Min) + Min;
+        return Result;
+    }
+};
+
+struct u32_random_state {
+    u64 Seed;
+
+    inline u32 PCG() {
+        u64 OldSeed = Seed;
+        Seed = Seed * 6364136223846793005ULL;
+        u64 Result = RotateRight64(((OldSeed >> 18u) ^ OldSeed) >> 27u, OldSeed >> 59u);
+        return Result;
+    }
+    inline u32 XorShift() {
+        u64 Result = Seed;
+        Seed ^= Seed >> 12;
+        Seed ^= Seed << 25;
+        Seed ^= Seed >> 27;
+        return (Result * 0x2545F4914F6CDD1DULL) >> 32;
+    }
+    inline u32 LCG() {
+        u32 Result = this->Seed;
+        Seed = Seed * 6364136223846793005ULL + 1442695040888963407ULL;
+        return Result;
+    }
+    inline u32 RandomInt() {
+        switch (DefaultRandomAlgorithm) {
+            case RANDOM_ALGORITHM_PCG: return this->PCG();
+            case RANDOM_ALGORITHM_XORSHIFT: return this->XorShift();
+            case RANDOM_ALGORITHM_LCG: return this->LCG();
+        }
+    }
+    inline f32 RandomFloat(f32 Min = -1.0f, f32 Max = 1.0f) {
+        u32 N = this->RandomInt();
+        f32 InverseMaxInt = (Max - Min) / (f64)((u32)-1);
+        f32 RandomFloat = (f32)N * InverseMaxInt;
+        f32 Result = RandomFloat + Min;
+        return Result;
+    }
+};
 
 /* == Profiling == */
 f64 QueryTimestampInMilliseconds();

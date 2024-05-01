@@ -8,6 +8,7 @@ union v128 {
     v3 Vector3;
     v4 Vector4;
     f32x4 Float4;
+    u32x4 Uint4;
     v128_t Register;
 
     inline v128() { Register = wasm_f32x4_const_splat(0.0f); };
@@ -15,6 +16,7 @@ union v128 {
     inline v128(const v2 &Value) : Vector2(Value) { };
     inline v128(const v3 &Value) : Vector3(Value) { };
     inline v128(const f32x4 &Value) : Float4(Value) { };
+    inline v128(const u32x4 &Value) : Uint4(Value) { };
     inline v128(const v4 &Value) : Vector4(Value) { };
     inline v128(const v128_t &SIMDLane) : Register(SIMDLane) { };
 
@@ -31,7 +33,11 @@ union v128 {
     }
 };
 
-static inline f32 Sqrt(f32 Value) {
+inline f32x4::f32x4(const u32x4 &V) {
+    v128 Result = wasm_f32x4_make(V[0], V[1], V[2], V[3]); // wasm_convert ?
+    *this = (f32x4)Result;
+}
+static inline f32 SquareRoot(f32 Value) {
     return __builtin_sqrt(Value);
 }
 static inline f32 Max(f32 A, f32 B) {
@@ -91,6 +97,19 @@ MATHCALL u64 PopCount(u64 a) {
     return __builtin_popcount(a);
 }
 
+MATHCALL u32 RotateRight32(u32 Value, s32 Rotation) {
+    return __builtin_rotateright32(Value, Rotation);
+}
+MATHCALL u64 RotateRight64(u64 Value, s32 Rotation) {
+    return __builtin_rotateright64(Value, Rotation);
+}
+MATHCALL u32 RotateLeft32(u32 Value, s32 Rotation) {
+    return __builtin_rotateleft32(Value, Rotation);
+}
+MATHCALL u64 RotateLeft64(u64 Value, s32 Rotation) {
+    return __builtin_rotateleft64(Value, Rotation);
+}
+
 inline f32 v3::Dot(const v3 &A, const v3 &B) {
     v3 Mul = A * B;
     return Mul.x + Mul.y + Mul.z;
@@ -99,7 +118,7 @@ inline f32 v3::LengthSquared(const v3 &Value) {
     return v3::Dot(Value, Value);
 }
 inline f32 v3::Length(const v3 &Value) {
-    return Sqrt(v3::LengthSquared(Value));
+    return SquareRoot(v3::LengthSquared(Value));
 }
 inline v3 v3::Normalize(const v3 &Value) {
     f32 LengthSquared = v3::LengthSquared(Value);
@@ -107,7 +126,7 @@ inline v3 v3::Normalize(const v3 &Value) {
     bool LengthGreaterThanZero = LengthSquared > F32Epsilon;
     v128 Mask = v128::CreateMask(LengthGreaterThanZero);
 
-    f32 Length = Sqrt(LengthSquared);
+    f32 Length = SquareRoot(LengthSquared);
     v3 Result = Value / Length;
 
     v128 MaskedResult = wasm_v128_and(v128(Result), Mask);

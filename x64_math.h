@@ -131,6 +131,19 @@ MATHCALL u64 RoundUpPowerOf2(u64 Value, u64 Power2) {
     return Result;
 }
 
+MATHCALL u32 RotateRight32(u32 Value, s32 Rotation) {
+    return _rotr(Value, Rotation);
+}
+MATHCALL u64 RotateRight64(u64 Value, s32 Rotation) {
+    return _rotr64(Value, Rotation);
+}
+MATHCALL u32 RotateLeft32(u32 Value, s32 Rotation) {
+    return _rotl(Value, Rotation);
+}
+MATHCALL u64 RotateLeft64(u64 Value, s32 Rotation) {
+    return _rotl64(Value, Rotation);
+}
+
 inline f32 v2::Dot(const v2 &A, const v2 &B) {
     v2 Mul = A * B;
     return Mul.x + Mul.y;
@@ -254,15 +267,22 @@ inline void v3x::ConditionalMove(v3x *A, const v3x &B, const f32x &MoveMask) {
 #if SIMD_WIDTH >= 8
 union ymm {
     f32x8 Vector8;
+    u32x8 U32Vector8;
     __m256 Register;
     inline ymm() { Register = _mm256_setzero_ps(); };
     inline ymm(const f32x8 &Value) : Vector8(Value) { };
+    inline ymm(const u32x8 &Value) : U32Vector8(Value) { };
     inline ymm(const __m256 &YMM) : Register(YMM) { };
 
+    explicit operator u32x8() const { return U32Vector8; }
     explicit operator f32x8() const { return Vector8; }
     operator __m256() const { return Register; }
 };
 
+inline f32x8::f32x8(const u32x &V) {
+    ymm Result = _mm256_cvtepi32_ps(ymm(V));
+    *this = (f32x8)Result;
+}
 MATHCALL f32x8 operator+(const f32x8 &A, const f32x8 &B) {
     ymm Result = _mm256_add_ps(ymm(A), ymm(B));
     return (f32x8)Result;
@@ -352,6 +372,75 @@ MATHCALL bool IsZero(const f32x8 &Value) {
     ymm ComparisonResult = _mm256_cmp_ps(ymm(Value), Zero, _CMP_NEQ_OQ);
     s32 MoveMask = _mm256_movemask_ps(ComparisonResult);
     return MoveMask == 0;
+}
+
+
+MATHCALL u32x8 operator+(const u32x8 &A, const u32x8 &B) {
+    ymm Result = _mm256_add_epi32(ymm(A), ymm(B));
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator-(const u32x8 &A, const u32x8 &B) {
+    ymm Result = _mm256_sub_epi32(ymm(A), ymm(B));
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator*(const u32x8 &A, const u32x8 &B) {
+    ymm Result = _mm256_mul_epi32(ymm(A), ymm(B));
+    return (u32x8)Result;
+}
+
+MATHCALL u32x8 operator==(const u32x8 &A, const u32x8 &B) {
+    ymm Result = _mm256_cmpeq_epi32(ymm(A), ymm(B));
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator!=(const u32x8 &A, const u32x8 &B) {
+    ymm Ones = _mm256_cmpeq_epi32(ymm(u32x8(0)), ymm(u32x8(0)));
+    ymm ComparisonResult = _mm256_cmpeq_epi32(ymm(A), ymm(B));
+    ymm Result = _mm256_xor_si256(ComparisonResult, Ones);
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator>(const u32x8 &A, const u32x8 &B) {
+    ymm Result = _mm256_cmpgt_epi32(ymm(A), ymm(B));
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator<(const u32x8 &A, const u32x8 &B) {
+    ymm Ones = _mm256_cmpeq_epi32(ymm(u32x8(0)), ymm(u32x8(0)));
+    ymm ComparisonResult = _mm256_cmpgt_epi32(ymm(A - 1), ymm(B));
+    ymm Result = _mm256_xor_si256(ComparisonResult, Ones);
+    return (u32x8)Result;
+}
+
+MATHCALL u32x8 operator&(const u32x8 &A, const u32x8 &B) {
+    ymm Result = _mm256_and_si256(ymm(A), ymm(B));
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator|(const u32x8 &A, const u32x8 &B) {
+    ymm Result = _mm256_or_si256(ymm(A), ymm(B));
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator^(const u32x8 &A, const u32x8 &B) {
+    ymm Result = _mm256_xor_si256(ymm(A), ymm(B));
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator~(const u32x8 &A) {
+    ymm Ones = _mm256_cmpeq_epi32(ymm(u32x8(0)), ymm(u32x8(0)));
+    ymm Result = _mm256_xor_si256(ymm(A), Ones);
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator>>(const u32x8 &A, const u32x8 &B) {
+    ymm Result = _mm256_srlv_epi32(ymm(A), ymm(B));
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator<<(const u32x8 &A, const u32x8 &B) {
+    ymm Result = _mm256_sllv_epi32(ymm(A), ymm(B));
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator>>(const u32x8 &A, const u32 &&B) {
+    ymm Result = _mm256_srli_epi32(ymm(A), B);
+    return (u32x8)Result;
+}
+MATHCALL u32x8 operator<<(const u32x8 &A, const u32 &&B) {
+    ymm Result = _mm256_slli_epi32(ymm(A), B);
+    return (u32x8)Result;
 }
 #endif
 

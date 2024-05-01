@@ -101,6 +101,8 @@ static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * co
     }
 }
 
+static memory_arena RenderData;
+
 void OnInit(init_params *Params) {
     constexpr string8 WindowTitle = u8"Raytracing In One Weekend";
     Params->WindowTitle = WindowTitle;
@@ -109,6 +111,8 @@ void OnInit(init_params *Params) {
 
     InitScalarSpheres(ScalarSpheres);
     ConvertScalarSpheresToSIMDSpheres(ScalarSpheres, array_len(ScalarSpheres), Spheres);
+
+    RenderData = AllocateArenaFromOS(MB(256));
 }
 
 static inline constexpr u32 ColorFromV4(const v4 &Value) {
@@ -129,10 +133,18 @@ static inline u32& GetPixel(const image &Image, u32 X, u32 Y) {
 #endif
 }
 
+static inline v4& GetPixelV4(const image &Image, u32 X, u32 Y) {
+    v4 *ImageData = (v4 *)Image.Data;
+    return ImageData[Y * Image.Width + X];
+}
+
+static u32 PreviousRayCount = 0;
+static image PreviousImage = {};
+
 void OnRender(const image &Image) {
 
+    v3 Movement = 0.0f;
     {
-        v3 Movement = 0.0f;
         if (IsDown(key::W) || IsDown(key::ArrowUp)) {
             Movement.z -= 0.5f;
         }
@@ -160,6 +172,14 @@ void OnRender(const image &Image) {
         Origin += Movement;
     }
 
+    if (Image.Width != PreviousImage.Width || Image.Height != PreviousImage.Height || v3::Length(Movement) > 0.0f) {
+        PreviousRayCount = 0;
+        RenderData.Reset();
+        PreviousImage.Width = Image.Width;
+        PreviousImage.Height = Image.Height;
+        PreviousImage.Data = (v4 *)RenderData.Push(Image.Width * Image.Height * sizeof(v4));
+    }
+
     f64 StartTime = QueryTimestampInMilliseconds();
 
     v3 CameraZ = v3(0.0f, 0.0f, 1.0f);
@@ -178,11 +198,6 @@ void OnRender(const image &Image) {
 #if 1
     for (u32 y = 0; y < Image.Height; ++y) {
         for (u32 x = 0; x < Image.Width; ++x) {
-
-            u32 &Pixel = GetPixel(Image, x, y);
-            Pixel = ColorFromV4(v4(0.0f, 0.0f, 0.0f, 1.0f));
-
-            u32 RayCount = 4;
 
             f32 JitterX = RandomState.RandomFloat(-0.5f, 0.5f);
             f32 JitterY = RandomState.RandomFloat(-0.5f, 0.5f);
@@ -227,16 +242,27 @@ void OnRender(const image &Image) {
             u32 Index = f32x::HorizontalMinIndex(MinT);
             const v3_reference &C = OutputColor[Index];
 
-            v4 Color = v4(C.x, C.y, C.z, 1.0f);
-            Pixel = ColorFromV4(Color);
+            v4 Color = v4(C.x, C.y, C.z, 1.0);
+            u32 TotalRayCount = PreviousRayCount + 1;
+            v4 &PreviousColor = GetPixelV4(PreviousImage, x, y);
+            v4 FinalColor = Color * (1.0f / (f32)TotalRayCount) + PreviousColor * ((f32)PreviousRayCount / (f32)TotalRayCount);
+            // v4 FinalColor = Color * (1.0f / TotalRayCount);
+            // v4 FinalColor = Color;
+            FinalColor.w = 1.0f;
+            PreviousColor = FinalColor;
+
+            u32 &Pixel = GetPixel(Image, x, y);
+            Pixel = ColorFromV4(FinalColor);
         }
     }
+
+    PreviousRayCount += 1;
 #else
         for (u32 y = 0; y < Image.Height; ++y) {
             for (u32 x = 0; x < Image.Width; ++x) {
 
                 u32 &Pixel = GetPixel(Image, x, y);
-                Pixel = U32FromV4(v4(0.0f, 0.0f, 0.0f, 1.0f));
+                Pixel = ColorFromV4(v4(0.0f, 0.0f, 0.0f, 1.0f));
 
                 f32 FilmX = -1.0f + (x * 2.0f) / (f32)Image.Width;
                 f32 FilmY = -1.0f + (y * 2.0f) / (f32)Image.Height;

@@ -70,6 +70,10 @@ void memory_arena::Pop(void *Ptr) {
     this->Offset = Ptr;
 }
 
+void memory_arena::Reset() {
+    this->Offset = this->Start;
+}
+
 memory_arena memory_arena::CreateScratch() {
     memory_arena Result = {0};
     Result.Start = this->Offset;

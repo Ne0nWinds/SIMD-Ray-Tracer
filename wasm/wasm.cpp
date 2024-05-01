@@ -21,8 +21,10 @@ memory_arena AllocateArenaFromOS(u32 Size, u64 StartingAddress) {
     u32 PagesNeeded = CommitSize / PAGE_SIZE;
     s32 Success = __builtin_wasm_memory_grow(0, PagesNeeded);
     Assert(Success != -1);
-    (void)Success;
 
+    WasmPagesAllocated += PagesNeeded;
+
+    (void)Success;
     (void)StartingAddress; // WASM already has a fixed address space
 
     return Result;
@@ -54,6 +56,10 @@ void memory_arena::Pop(void *Ptr) {
     this->Offset = Ptr;
 }
 
+void memory_arena::Reset() {
+    this->Offset = this->Start;
+}
+
 f64 WASM_IMPORT(__now)();
 
 f64 QueryTimestampInMilliseconds() {
@@ -77,8 +83,8 @@ void WASM_EXPORT(init)() {
     OnInit(&Params);
 }
 
-u64 KeyState[2] = {0};
-u64 PrevKeyState[2] = {0};
+static u64 KeyState[2] = {0};
+static u64 PrevKeyState[2] = {0};
 
 void *WASM_EXPORT(draw)(u32 Width, u32 Height) {
     PrevKeyState[0] = KeyState[0];

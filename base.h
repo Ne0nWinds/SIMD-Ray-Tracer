@@ -104,6 +104,7 @@ struct memory_arena {
 
     void *Push(u64 Size, u32 Alignment = 16);
     void Pop(void *Ptr);
+    void Reset();
     memory_arena CreateScratch();
 };
 memory_arena AllocateArenaFromOS(u32 Size, u64 StartingAddress = 0);

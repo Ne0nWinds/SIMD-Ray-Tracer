@@ -229,6 +229,23 @@ MATHCALL v3 operator/(const v3 &A, const v3 &B) {
     return (v3)Result;
 }
 
+MATHCALL v4 operator+(const v4 &A, const v4 &B) {
+    xmm Result = _mm_add_ps(xmm(A), xmm(B));
+    return (v4)Result;
+}
+MATHCALL v4 operator-(const v4 &A, const v4 &B) {
+    xmm Result = _mm_sub_ps(xmm(A), xmm(B));
+    return (v4)Result;
+}
+MATHCALL v4 operator*(const v4 &A, const v4 &B) {
+    xmm Result = _mm_mul_ps(xmm(A), xmm(B));
+    return (v4)Result;
+}
+MATHCALL v4 operator/(const v4 &A, const v4 &B) {
+    xmm Result = _mm_div_ps(xmm(A), xmm(B));
+    return (v4)Result;
+}
+
 inline f32x v3x::Dot(const v3x &A, const v3x &B) {
     v3x C = A * B;
     f32x Result = C.x + C.y + C.z;

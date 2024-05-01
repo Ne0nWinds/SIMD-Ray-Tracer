@@ -149,6 +149,23 @@ MATHCALL v3 operator/(const v3 &A, const v3 &B) {
     return (v3)Result;
 }
 
+MATHCALL v4 operator+(const v4 &A, const v4 &B) {
+    v128 Result = wasm_f32x4_add(v128(A), v128(B));
+    return (v4)Result;
+}
+MATHCALL v4 operator-(const v4 &A, const v4 &B) {
+    v128 Result = wasm_f32x4_sub(v128(A), v128(B));
+    return (v4)Result;
+}
+MATHCALL v4 operator*(const v4 &A, const v4 &B) {
+    v128 Result = wasm_f32x4_mul(v128(A), v128(B));
+    return (v4)Result;
+}
+MATHCALL v4 operator/(const v4 &A, const v4 &B) {
+    v128 Result = wasm_f32x4_div(v128(A), v128(B));
+    return (v4)Result;
+}
+
 inline v3 v3::Cross(const v3 &A, const v3 &B) {
     v3 Result;
     Result.x = A.y * B.z - A.z * B.y;

@@ -21,6 +21,10 @@ struct v2;
 struct v3;
 struct v4;
 
+struct v2_reference;
+struct v3_reference;
+struct v4_reference;
+
 struct string8 {
     char8 *Data;
     u32 Size;
@@ -311,6 +315,7 @@ v2 GetMouseWheelDelta();
 /* == Math == */
 #define MATHCALL static inline
 
+
 struct v2 {
     f32 x = 0.0f, y = 0.0f;
     inline v2() { };
@@ -332,6 +337,7 @@ struct v3 {
     inline v3() { };
     inline v3(f32 X);
     inline v3(f32 X, f32 Y, f32 Z);
+    explicit inline v3(const v3_reference &V3);
 
     static inline f32 Dot(const v3 &A, const v3 &B);
     static inline f32 LengthSquared(const v3 &Value);
@@ -428,6 +434,12 @@ struct v4_reference {
         this->w = Value.w;
     }
 };
+
+inline v3::v3(const v3_reference &V3) {
+    this->x = V3.x;
+    this->y = V3.y;
+    this->z = V3.z;
+}
 
 struct f32x4 {
     f32 Value[4];
@@ -848,7 +860,7 @@ constexpr static u32 F32SignBit = 0x8000'0000;
 #define RANDOM_ALGORITHM_XORSHIFT 2
 #define RANDOM_ALGORITHM_LCG 3
 
-static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_PCG;
+static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_XORSHIFT;
 
 struct u32x_random_state {
     u32x Seed;
@@ -893,7 +905,7 @@ struct u32_random_state {
 
     inline u32 PCG() {
         u64 OldSeed = Seed;
-        Seed = Seed * 6364136223846793005ULL;
+        Seed = Seed * 6364136223846793005ULL + 1442695040888963407ULL;
         u64 Result = RotateRight64(((OldSeed >> 18u) ^ OldSeed) >> 27u, OldSeed >> 59u);
         return Result;
     }

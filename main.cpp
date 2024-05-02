@@ -7,11 +7,13 @@ struct scalar_sphere {
     v3 Position;
     f32 Radius;
     v3 Color;
+    f32 Specular;
 };
 struct sphere_group {
     v3x Positions;
     f32x Radii;
     v3x Color;
+    f32x Specular;
 };
 static scalar_sphere ScalarSpheres[8];
 static sphere_group Spheres[array_len(ScalarSpheres) / SIMD_WIDTH];
@@ -25,14 +27,15 @@ static constexpr inline void InitScalarSpheres(scalar_sphere *ScalarSpheres) {
     ScalarSpheres[0].Color.x = 1.0f;
     ScalarSpheres[0].Color.y = 0.0f;
     ScalarSpheres[0].Color.z = 0.0f;
+    ScalarSpheres[0].Specular = 1.0f;
 
-    ScalarSpheres[1].Position.x = -5.0f;
-    ScalarSpheres[1].Position.y = 0.0f;
-    ScalarSpheres[1].Position.z = -25.0f;
-    ScalarSpheres[1].Radius = 2.0f;
-    ScalarSpheres[1].Color.x = 0.0f;
-    ScalarSpheres[1].Color.y = 1.0f;
-    ScalarSpheres[1].Color.z = 0.0f;
+    ScalarSpheres[1].Position.x = 0.0f;
+    ScalarSpheres[1].Position.y = -130.0f;
+    ScalarSpheres[1].Position.z = -15.0f;
+    ScalarSpheres[1].Radius = 128.0f;
+    ScalarSpheres[1].Color.x = 0.2f;
+    ScalarSpheres[1].Color.y = 0.2f;
+    ScalarSpheres[1].Color.z = 0.2f;
 
     ScalarSpheres[2].Position.x = 5.0f;
     ScalarSpheres[2].Position.y = 2.0f;
@@ -43,20 +46,21 @@ static constexpr inline void InitScalarSpheres(scalar_sphere *ScalarSpheres) {
     ScalarSpheres[2].Color.z = 1.0f;
 
     ScalarSpheres[3].Position.x = 6.0f;
-    ScalarSpheres[3].Position.y = -6.0f;
+    ScalarSpheres[3].Position.y = 6.0f;
     ScalarSpheres[3].Position.z = -18.0f;
     ScalarSpheres[3].Radius = 2.0f;
-    ScalarSpheres[3].Color.x = 1.0f;
-    ScalarSpheres[3].Color.y = 1.0f;
-    ScalarSpheres[3].Color.z = 0.0f;
+    ScalarSpheres[3].Color.x = 0.75f;
+    ScalarSpheres[3].Color.y = 0.85f;
+    ScalarSpheres[3].Color.z = 0.125f;
 
     ScalarSpheres[4].Position.x = -7.0f;
-    ScalarSpheres[4].Position.y = -6.0f;
+    ScalarSpheres[4].Position.y = -0.5f;
     ScalarSpheres[4].Position.z = -25.0f;
-    ScalarSpheres[4].Radius = 4.0f;
+    ScalarSpheres[4].Radius = 1.25f;
     ScalarSpheres[4].Color.x = 1.0f;
     ScalarSpheres[4].Color.y = 0.5f;
     ScalarSpheres[4].Color.z = 0.0f;
+    ScalarSpheres[4].Specular = 0.85f;
     
     ScalarSpheres[5].Position.x = 7.0f;
     ScalarSpheres[5].Position.y = 6.0f;
@@ -98,6 +102,10 @@ static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * co
             const v3 &Color = Spheres[i + j].Color;
             SphereGroup.Color[j] = Color;
         }
+        for (u32 j = 0; j < SIMD_WIDTH; ++j) {
+            const f32 &Specular = Spheres[i + j].Specular;
+            SphereGroup.Specular[j] = Specular;
+        }
     }
 }
 
@@ -138,6 +146,35 @@ static inline v4& GetPixelV4(const image &Image, u32 X, u32 Y) {
     return ImageData[Y * Image.Width + X];
 }
 
+static f32 LinearToSRGB(f32 L) {
+	f32 Result; 
+
+	L = Saturate(L);
+
+	if (L < 0.0031308f) {
+		Result = L * 12.92f;
+	} else {
+#if 0
+		Result = 1.055f * powf(L, 1.0f / 2.4f) - 0.055f;
+#else
+		// bad but fast code
+		Result = 1.02f * SquareRoot(L);
+#endif
+	}
+
+	return Result;
+}
+
+static v4 LinearToSRGB(v4 L) {
+    v4 Result;
+    Result.x = LinearToSRGB(L.x);
+    Result.y = LinearToSRGB(L.y);
+    Result.z = LinearToSRGB(L.z);
+    Result.w = 1.0f;
+    return Result;
+}
+
+
 static u32 PreviousRayCount = 0;
 static image PreviousImage = {};
 
@@ -164,7 +201,7 @@ void OnRender(const image &Image) {
         bool FlyDown = IsDown(key::C);
 #ifndef PLATFORM_WASM
         // Ctrl+W will close the browser window
-        FlyDown = IsDown(key::LeftControl);
+        FlyDown |= IsDown(key::LeftControl);
 #endif
         if (FlyDown) {
             Movement.y -= 0.5f;
@@ -199,60 +236,90 @@ void OnRender(const image &Image) {
     for (u32 y = 0; y < Image.Height; ++y) {
         for (u32 x = 0; x < Image.Width; ++x) {
 
+            v3 Attenuation = 1.0f;
+            v3 OutputColor = 0.0f;
+
             f32 JitterX = RandomState.RandomFloat(-0.5f, 0.5f);
             f32 JitterY = RandomState.RandomFloat(-0.5f, 0.5f);
             f32 FilmX = -1.0f + ((x + JitterX) * 2.0f) / (f32)Image.Width;
             f32 FilmY = -1.0f + ((y + JitterY) * 2.0f) / (f32)Image.Height;
 
             v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
-            v3 RayDirection = v3::Normalize(FilmP - Origin);
+            v3 RayOrigin = Origin;
+            v3 RayDirection = v3::Normalize(FilmP - RayOrigin);
 
             f32 A = (RayDirection.y + 1.0f) * 0.5f;
             const v3 DefaultColor = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
 
-            v3x OutputColor = DefaultColor;
-            f32x MinT = F32Max;
+            u32 MaxRayBounce = 12;
+            for (u32 i = 0; i < MaxRayBounce; ++i) {
 
-            for (u32 i = 0; i < array_len(Spheres); ++i) {
-                const sphere_group &SphereGroup = Spheres[i];
+                v3x HitEmissive = DefaultColor;
+                v3x HitColor = 0.0f;
+                v3x HitNormal = 0.0f;
+                v3x NextRayOrigin = 0.0f;
+                f32x HitSpecular = 0.0f;
+                f32x MinT = F32Max;
 
-                v3x SphereCenter = SphereGroup.Positions - Origin;
-                f32x T = v3x::Dot(SphereCenter, RayDirection);
-                v3x ProjectedPoint = v3x(RayDirection) * T;
+                for (const sphere_group &SphereGroup : Spheres) {
+                    v3x SphereCenter = SphereGroup.Positions - Origin;
+                    f32x T = v3x::Dot(SphereCenter, RayDirection);
+                    v3x ProjectedPoint = v3x(RayDirection) * T;
 
-                const f32x &Radius = SphereGroup.Radii;
-                f32x DistanceFromCenter = v3x::Length(SphereCenter - ProjectedPoint);
+                    const f32x &Radius = SphereGroup.Radii;
+                    f32x DistanceFromCenter = v3x::Length(SphereCenter - ProjectedPoint);
 
-                f32x HitMask = DistanceFromCenter < Radius;
+                    f32x HitMask = DistanceFromCenter < Radius;
 
-                if (IsZero(HitMask)) continue;
+                    if (IsZero(HitMask)) continue;
 
-                f32x X = f32x::SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
-                f32x IntersectionT = T - X;
-                v3x IntersectionPoint = RayDirection * IntersectionT;
-                f32x MinMask = (IntersectionT < MinT) & (IntersectionT > F32Epsilon);
-                f32x MoveMask = MinMask & HitMask;
+                    f32x X = f32x::SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
 
-                v3x Normal = v3x::Normalize(IntersectionPoint - SphereCenter);
-                v3x Color = SphereGroup.Color;
-                f32x::ConditionalMove(&MinT, T, MoveMask);
-                v3x::ConditionalMove(&OutputColor, Color, MoveMask);
+                    f32x IntersectionT = T - X;
+                    f32x::ConditionalMove(&IntersectionT, T + X, IntersectionT < F32Epsilon);
+
+                    v3x IntersectionPoint = RayDirection * IntersectionT;
+                    f32x MinMask = (IntersectionT < MinT) & (IntersectionT > F32Epsilon);
+                    f32x MoveMask = MinMask & HitMask;
+
+                    v3x Normal = v3x::Normalize(IntersectionPoint - SphereCenter);
+                    f32x::ConditionalMove(&MinT, IntersectionT, MoveMask);
+                    v3x::ConditionalMove(&HitColor, SphereGroup.Color, MoveMask);
+                    v3x::ConditionalMove(&HitNormal, Normal, MoveMask);
+                    f32x::ConditionalMove(&HitSpecular, SphereGroup.Specular, MoveMask);
+                    v3x::ConditionalMove(&HitEmissive, 0, MoveMask);
+                    v3x::ConditionalMove(&NextRayOrigin, IntersectionPoint, MoveMask);
+                }
+
+                u32 Index = f32x::HorizontalMinIndex(MinT);
+                OutputColor += v3(HitEmissive[Index]) * Attenuation;
+                Attenuation *= v3(HitColor[Index]);
+                RayOrigin = v3(NextRayOrigin[Index]);
+
+                f32 Specular = HitSpecular[Index];
+                v3 Normal = v3(HitNormal[Index]);
+                v3 PureBounce = RayDirection - 2.0f * v3::Dot(RayDirection, Normal) * Normal;
+                v3 RandomV3 = v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat());
+                v3 RandomBounce = v3::Normalize(Normal + RandomV3);
+                RayDirection = (1.0 - Specular) * RandomBounce + Specular * PureBounce;
+                // RayDirection = PureBounce;
+                // RayDirection = RandomBounce;
+
+                if (MinT[Index] == F32Max) break;
             }
 
-            u32 Index = f32x::HorizontalMinIndex(MinT);
-            const v3_reference &C = OutputColor[Index];
-
-            v4 Color = v4(C.x, C.y, C.z, 1.0);
+            // v4 Color = v4(C.x, C.y, C.z, 1.0);
             u32 TotalRayCount = PreviousRayCount + 1;
             v4 &PreviousColor = GetPixelV4(PreviousImage, x, y);
-            v4 FinalColor = Color * (1.0f / (f32)TotalRayCount) + PreviousColor * ((f32)PreviousRayCount / (f32)TotalRayCount);
+            v4 OutputColorV4 = v4(OutputColor.x, OutputColor.y, OutputColor.z, 1.0f);
+            v4 FinalColor = OutputColorV4 * (1.0f / (f32)TotalRayCount) + PreviousColor * ((f32)PreviousRayCount / (f32)TotalRayCount);
             // v4 FinalColor = Color * (1.0f / TotalRayCount);
-            // v4 FinalColor = Color;
+            // v4 FinalColor = OutputColorV4;
             FinalColor.w = 1.0f;
             PreviousColor = FinalColor;
 
             u32 &Pixel = GetPixel(Image, x, y);
-            Pixel = ColorFromV4(FinalColor);
+            Pixel = ColorFromV4(LinearToSRGB(FinalColor));
         }
     }
 

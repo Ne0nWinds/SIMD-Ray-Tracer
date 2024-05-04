@@ -860,7 +860,7 @@ constexpr static u32 F32SignBit = 0x8000'0000;
 #define RANDOM_ALGORITHM_XORSHIFT 2
 #define RANDOM_ALGORITHM_LCG 3
 
-static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_XORSHIFT;
+static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_PCG;
 
 struct u32x_random_state {
     u32x Seed;
@@ -905,8 +905,8 @@ struct u32_random_state {
 
     inline u32 PCG() {
         u64 OldSeed = Seed;
-        Seed = Seed * 6364136223846793005ULL;
-        u64 Result = RotateRight64(((OldSeed >> 18u) ^ OldSeed) >> 27u, OldSeed >> 59u);
+        Seed = Seed * 6364136223846793005ULL + 1442695040888963407ULL;
+        u32 Result = RotateRight32((u32)(OldSeed >> 32) ^ (u32)OldSeed, OldSeed >> 59);
         return Result;
     }
     inline u32 XorShift() {

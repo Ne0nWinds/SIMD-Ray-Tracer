@@ -248,7 +248,6 @@ void OnRender(const image &Image) {
             v3 RayOrigin = CameraPosition;
             v3 RayDirection = v3::Normalize(FilmP - RayOrigin);
 
-
             u32 MaxRayBounce = 8;
             for (u32 i = 0; i < MaxRayBounce; ++i) {
                 f32 A = (RayDirection.y + 1.0f) * 0.5f;

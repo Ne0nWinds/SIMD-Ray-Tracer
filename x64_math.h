@@ -385,9 +385,7 @@ MATHCALL f32x8 operator<(const f32x8 &A, const f32x8 &B) {
     return (f32x8)Result;
 }
 MATHCALL bool IsZero(const f32x8 &Value) {
-    ymm Zero = ymm();
-    ymm ComparisonResult = _mm256_cmp_ps(ymm(Value), Zero, _CMP_NEQ_OQ);
-    s32 MoveMask = _mm256_movemask_ps(ComparisonResult);
+    s32 MoveMask = _mm256_movemask_ps(ymm(Value));
     return MoveMask == 0;
 }
 

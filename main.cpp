@@ -1,7 +1,7 @@
 
 #include "base.h"
 
-static v3 Origin;
+static v3 CameraPosition;
 
 struct scalar_sphere {
     v3 Position;
@@ -25,7 +25,7 @@ static constexpr inline void InitScalarSpheres(scalar_sphere *ScalarSpheres) {
     ScalarSpheres[0].Position.z = -15.0f;
     ScalarSpheres[0].Radius = 2.0f;
     ScalarSpheres[0].Color.x = 1.0f;
-    ScalarSpheres[0].Color.y = 0.0f;
+    ScalarSpheres[0].Color.y = 0.125f;
     ScalarSpheres[0].Color.z = 0.0f;
     ScalarSpheres[0].Specular = 1.0f;
 
@@ -206,7 +206,7 @@ void OnRender(const image &Image) {
         if (FlyDown) {
             Movement.y -= 0.5f;
         }
-        Origin += Movement;
+        CameraPosition += Movement;
     }
 
     if (Image.Width != PreviousImage.Width || Image.Height != PreviousImage.Height || v3::Length(Movement) > 0.0f) {
@@ -222,7 +222,7 @@ void OnRender(const image &Image) {
     v3 CameraZ = v3(0.0f, 0.0f, 1.0f);
     v3 CameraX = v3::Normalize(v3::Cross(v3(0.0f, 1.0f, 0.0f), CameraZ));
     v3 CameraY = v3::Normalize(v3::Cross(CameraZ, CameraX));
-    v3 FilmCenter = Origin - CameraZ;
+    v3 FilmCenter = CameraPosition - CameraZ;
 
     f32 FilmW = 1.0f;
     f32 FilmH = 1.0f;
@@ -245,13 +245,13 @@ void OnRender(const image &Image) {
             f32 FilmY = -1.0f + ((y + JitterY) * 2.0f) / (f32)Image.Height;
 
             v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
-            v3 RayOrigin = Origin;
+            v3 RayOrigin = CameraPosition;
             v3 RayDirection = v3::Normalize(FilmP - RayOrigin);
 
             f32 A = (RayDirection.y + 1.0f) * 0.5f;
             const v3 DefaultColor = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
 
-            u32 MaxRayBounce = 12;
+            u32 MaxRayBounce = 16;
             for (u32 i = 0; i < MaxRayBounce; ++i) {
 
                 v3x HitEmissive = DefaultColor;
@@ -262,33 +262,34 @@ void OnRender(const image &Image) {
                 f32x MinT = F32Max;
 
                 for (const sphere_group &SphereGroup : Spheres) {
-                    v3x SphereCenter = SphereGroup.Positions - Origin;
+                    v3x SphereCenter = SphereGroup.Positions - RayOrigin;
                     f32x T = v3x::Dot(SphereCenter, RayDirection);
                     v3x ProjectedPoint = v3x(RayDirection) * T;
 
                     const f32x &Radius = SphereGroup.Radii;
-                    f32x DistanceFromCenter = v3x::Length(SphereCenter - ProjectedPoint);
+                    const f32x RadiusSquared = Radius * Radius;
+                    f32x DistanceFromCenter = v3x::LengthSquared(SphereCenter - ProjectedPoint);
 
-                    f32x HitMask = DistanceFromCenter < Radius;
+                    f32x HitMask = DistanceFromCenter < RadiusSquared;
 
                     if (IsZero(HitMask)) continue;
 
-                    f32x X = f32x::SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
+                    f32x X = f32x::SquareRoot(RadiusSquared - DistanceFromCenter);
 
                     f32x IntersectionT = T - X;
-                    f32x::ConditionalMove(&IntersectionT, T + X, IntersectionT < F32Epsilon);
+                    // f32x::ConditionalMove(&IntersectionT, T + X, IntersectionT < 0);
 
                     v3x IntersectionPoint = RayDirection * IntersectionT;
                     f32x MinMask = (IntersectionT < MinT) & (IntersectionT > F32Epsilon);
                     f32x MoveMask = MinMask & HitMask;
 
-                    v3x Normal = v3x::Normalize(IntersectionPoint - SphereCenter);
+                    v3x Normal = (IntersectionPoint - SphereCenter) * f32x::Reciprocal(Radius);
                     f32x::ConditionalMove(&MinT, IntersectionT, MoveMask);
                     v3x::ConditionalMove(&HitColor, SphereGroup.Color, MoveMask);
                     v3x::ConditionalMove(&HitNormal, Normal, MoveMask);
                     f32x::ConditionalMove(&HitSpecular, SphereGroup.Specular, MoveMask);
                     v3x::ConditionalMove(&HitEmissive, 0, MoveMask);
-                    v3x::ConditionalMove(&NextRayOrigin, IntersectionPoint, MoveMask);
+                    v3x::ConditionalMove(&NextRayOrigin, RayOrigin + IntersectionPoint, MoveMask);
                 }
 
                 u32 Index = f32x::HorizontalMinIndex(MinT);
@@ -301,9 +302,9 @@ void OnRender(const image &Image) {
                 v3 PureBounce = RayDirection - 2.0f * v3::Dot(RayDirection, Normal) * Normal;
                 v3 RandomV3 = v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat());
                 v3 RandomBounce = v3::Normalize(Normal + RandomV3);
-                RayDirection = (1.0 - Specular) * RandomBounce + Specular * PureBounce;
-                // RayDirection = PureBounce;
-                // RayDirection = RandomBounce;
+                // RayDirection = (1.0 - Specular) * RandomBounce + Specular * PureBounce;
+                RayDirection = PureBounce;
+                // RayDirection = Normal;
 
                 if (MinT[Index] == F32Max) break;
             }
@@ -336,29 +337,49 @@ void OnRender(const image &Image) {
 
                 v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
                 v3 RayDirection = v3::Normalize(FilmP - Origin);
+                v3 RayOrigin = Origin;
 
+                v3 Attenuation = 1.0f;
                 v3 OutputColor = v3(0.0f);
-                f32 MinT = F32Max;
 
-                for (u32 i = 0; i < 8; ++i) {
-                    scalar_sphere Sphere = ScalarSpheres[i];
-                    v3 SphereCenter = Sphere.Position - Origin;
-                    f32 T = v3::Dot(SphereCenter, RayDirection);
-                    v3 ProjectedPoint = RayDirection * T;
+                u32 MaxRayBounce = 2;
+                for (u32 i = 0; i < MaxRayBounce; ++i) {
+                    v3 HitNormal = 0.0f;
+                    v3 HitColor = 0.0f;
+                    v3 Emissive = 1.0f;
+                    f32 MinT = F32Max;
+                    for (const scalar_sphere &Sphere : ScalarSpheres) {
+                        v3 SphereCenter = Sphere.Position - RayOrigin;
+                        f32 T = v3::Dot(SphereCenter, RayDirection);
+                        v3 ProjectedPoint = RayDirection * T;
 
-                    f32 Radius = Sphere.Radius;
-                    f32 DistanceFromCenter = v3::Length(SphereCenter - ProjectedPoint);
-                    if (DistanceFromCenter > Radius) continue;
-                    if (T > MinT || T < F32Epsilon) continue;
-                    MinT = T;
-                    f32 X = SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
+                        f32 Radius = Sphere.Radius;
+                        f32 DistanceFromCenter = v3::Length(SphereCenter - ProjectedPoint);
+                        if (DistanceFromCenter > Radius) continue;
+                        if (T < F32Epsilon) continue;
+                        f32 X = SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
 
-                    v3 IntersectionPoint = RayDirection * (T - X);
-                    v3 Normal = v3::Normalize(IntersectionPoint - SphereCenter);
-                    Normal += 1.0f;
-                    Normal *= 0.5f;
-                    OutputColor = Normal;
+                        f32 T1 = T - X;
+                        // f32 T2 = T + X;
+                        // T = (T1 > 0) ? T1 : T2;
+
+                        if (T > MinT) continue;
+                        MinT = T;
+
+                        v3 IntersectionPoint = RayDirection * T1;
+                        v3 Normal = v3::Normalize(IntersectionPoint - SphereCenter);
+                        HitNormal = Normal;
+                        HitColor = Sphere.Color;
+                        Emissive = 0.0f;
+                        RayOrigin = RayOrigin + IntersectionPoint;
+                        RayDirection = HitNormal;
+                    }
+                    OutputColor += Attenuation * Emissive;
+                    Attenuation *= HitColor;
+
+                    if (MinT == F32Max) break;
                 }
+
                 v4 Color = v4(OutputColor.x, OutputColor.y, OutputColor.z, 1.0f);
                 Pixel = ColorFromV4(Color);
             }

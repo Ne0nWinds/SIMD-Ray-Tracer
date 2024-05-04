@@ -868,7 +868,7 @@ struct u32x_random_state {
     inline u32x PCG() {
         u32x State = this->Seed;
         u32x Result = ((State >> ((State >> 28u) + 4u)) ^ State) * 277803737u;
-        this->Seed = State * 747796405U + 2891336453U;
+        this->Seed = State * 747796405U;
         return (Result >> 22u) ^ Result;
     }
     inline u32x XorShift() {
@@ -905,7 +905,7 @@ struct u32_random_state {
 
     inline u32 PCG() {
         u64 OldSeed = Seed;
-        Seed = Seed * 6364136223846793005ULL + 1442695040888963407ULL;
+        Seed = Seed * 6364136223846793005ULL;
         u64 Result = RotateRight64(((OldSeed >> 18u) ^ OldSeed) >> 27u, OldSeed >> 59u);
         return Result;
     }

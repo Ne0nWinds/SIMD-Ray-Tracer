@@ -60,7 +60,7 @@ static constexpr inline void InitScalarSpheres(scalar_sphere *ScalarSpheres) {
     ScalarSpheres[4].Color.x = 1.0f;
     ScalarSpheres[4].Color.y = 0.5f;
     ScalarSpheres[4].Color.z = 0.0f;
-    ScalarSpheres[4].Specular = 0.85f;
+    ScalarSpheres[4].Specular = 0.95f;
     
     ScalarSpheres[5].Position.x = 7.0f;
     ScalarSpheres[5].Position.y = 6.0f;
@@ -248,12 +248,11 @@ void OnRender(const image &Image) {
             v3 RayOrigin = CameraPosition;
             v3 RayDirection = v3::Normalize(FilmP - RayOrigin);
 
-            f32 A = (RayDirection.y + 1.0f) * 0.5f;
-            const v3 DefaultColor = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
 
-            u32 MaxRayBounce = 16;
+            u32 MaxRayBounce = 8;
             for (u32 i = 0; i < MaxRayBounce; ++i) {
-
+                f32 A = (RayDirection.y + 1.0f) * 0.5f;
+                const v3 DefaultColor = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
                 v3x HitEmissive = DefaultColor;
                 v3x HitColor = 0.0f;
                 v3x HitNormal = 0.0f;
@@ -267,14 +266,13 @@ void OnRender(const image &Image) {
                     v3x ProjectedPoint = v3x(RayDirection) * T;
 
                     const f32x &Radius = SphereGroup.Radii;
-                    const f32x RadiusSquared = Radius * Radius;
-                    f32x DistanceFromCenter = v3x::LengthSquared(SphereCenter - ProjectedPoint);
+                    f32x DistanceFromCenter = v3x::Length(SphereCenter - ProjectedPoint);
 
-                    f32x HitMask = DistanceFromCenter < RadiusSquared;
+                    f32x HitMask = DistanceFromCenter < Radius;
 
                     if (IsZero(HitMask)) continue;
 
-                    f32x X = f32x::SquareRoot(RadiusSquared - DistanceFromCenter);
+                    f32x X = f32x::SquareRoot(Radius * Radius - DistanceFromCenter * DistanceFromCenter);
 
                     f32x IntersectionT = T - X;
                     // f32x::ConditionalMove(&IntersectionT, T + X, IntersectionT < 0);
@@ -301,10 +299,9 @@ void OnRender(const image &Image) {
                 v3 Normal = v3(HitNormal[Index]);
                 v3 PureBounce = RayDirection - 2.0f * v3::Dot(RayDirection, Normal) * Normal;
                 v3 RandomV3 = v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat());
-                v3 RandomBounce = v3::Normalize(Normal + RandomV3);
-                // RayDirection = (1.0 - Specular) * RandomBounce + Specular * PureBounce;
-                RayDirection = PureBounce;
-                // RayDirection = Normal;
+                v3 RandomBounce = Normal + RandomV3;
+                RayDirection = (1.0 - Specular) * RandomBounce + (Specular * PureBounce);
+                RayDirection = v3::Normalize(RayDirection);
 
                 if (MinT[Index] == F32Max) break;
             }

@@ -38,6 +38,10 @@ MATHCALL f32 SquareRoot(f32 Value) {
     xmm Result = _mm_sqrt_ss(xmm(Value));
     return (f32)Result;
 }
+MATHCALL f32 InverseSquareRoot(f32 Value) {
+    xmm Result = _mm_rsqrt_ss(xmm(Value));
+    return (f32)Result;
+}
 MATHCALL f32 Max(f32 A, f32 B) {
     xmm Result = _mm_max_ss(xmm(A), xmm(B));
     return (f32)Result;
@@ -200,7 +204,8 @@ inline v3 v3::Normalize(const v3 &Value) {
     xmm Mask = xmm::CreateMask(LengthGreaterThanZero);
 
     f32 Length = SquareRoot(LengthSquared);
-    v3 Result = Value * Reciprocal(Length);
+    // v3 Result = Value * Reciprocal(Length);
+    v3 Result = Value / Length;
 
     xmm MaskedResult = _mm_and_ps(xmm(Result), Mask);
     return (v3)MaskedResult;

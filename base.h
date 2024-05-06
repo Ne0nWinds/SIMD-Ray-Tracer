@@ -335,14 +335,19 @@ MATHCALL v2 operator/(const v2 &A, const v2 &B);
 struct v3 {
     f32 x = 0.0f, y = 0.0f, z = 0.0f;
     inline v3() { };
-    inline v3(f32 X);
-    inline v3(f32 X, f32 Y, f32 Z);
+
+    constexpr inline v3(const f32 &&X) : x(X), y(X), z(X) { };
+    constexpr inline v3(const f32 &&X, const f32 &&Y, const f32 &&Z) : x(X), y(Y), z(Z) { };
+    inline v3(const f32 &X);
+    inline v3(const f32 &X, const f32 &Y, const f32 &Z);
+
     explicit inline v3(const v3_reference &V3);
 
     static inline f32 Dot(const v3 &A, const v3 &B);
     static inline f32 LengthSquared(const v3 &Value);
     static inline f32 Length(const v3 &Value);
     static inline v3 Normalize(const v3 &Value);
+    static inline v3 NormalizeFast(const v3 &Value);
     static inline v3 Cross(const v3 &A, const v3 &B);
 } __attribute__((__vector_size__(12), __aligned__(16)));
 MATHCALL v3 operator+(const v3 &A, const v3 &B);

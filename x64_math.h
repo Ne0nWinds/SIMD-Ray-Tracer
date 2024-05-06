@@ -77,7 +77,7 @@ inline v2::v2(f32 X) {
     xmm xmm0 = _mm_set1_ps(X);
     *this = (v2)xmm0;
 }
-inline v3::v3(f32 X) {
+inline v3::v3(const f32 &X) {
     xmm xmm0 = _mm_set1_ps(X);
     *this = (v3)xmm0;
 }
@@ -90,7 +90,7 @@ inline v2::v2(f32 X, f32 Y) {
     xmm xmm0 = _mm_set_ps(0.0f, 0.0f, Y, X);
     *this = (v2)xmm0;
 }
-inline v3::v3(f32 X, f32 Y, f32 Z) {
+inline v3::v3(const f32 &X, const f32 &Y, const f32 &Z) {
     xmm xmm0 = _mm_set_ps(0.0f, Z, Y, X);
     *this = (v3)xmm0;
 }
@@ -204,8 +204,19 @@ inline v3 v3::Normalize(const v3 &Value) {
     xmm Mask = xmm::CreateMask(LengthGreaterThanZero);
 
     f32 Length = SquareRoot(LengthSquared);
-    // v3 Result = Value * Reciprocal(Length);
     v3 Result = Value / Length;
+
+    xmm MaskedResult = _mm_and_ps(xmm(Result), Mask);
+    return (v3)MaskedResult;
+}
+inline v3 v3::NormalizeFast(const v3 &Value) {
+    f32 LengthSquared = v3::LengthSquared(Value);
+
+    bool LengthGreaterThanZero = LengthSquared > F32Epsilon;
+    xmm Mask = xmm::CreateMask(LengthGreaterThanZero);
+
+    f32 InvLength = InverseSquareRoot(LengthSquared);
+    v3 Result = Value * InvLength;
 
     xmm MaskedResult = _mm_and_ps(xmm(Result), Mask);
     return (v3)MaskedResult;

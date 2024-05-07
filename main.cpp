@@ -23,9 +23,12 @@ static sphere_group Spheres[array_len(ScalarSpheres) / SIMD_WIDTH];
 static material Materials[array_len(ScalarSpheres)];
 static u32_random_state RandomState = { 0x4d595df4d0f33173ULL };
 
+static constexpr f32 WorldScale = 1.0f / 8.0f;
 constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v3 &Color, f32 Specular, scalar_sphere *Sphere) {
-    Sphere->Position = Position;
-    Sphere->Radius = Radius;
+    Sphere->Position.x = Position.x * WorldScale;
+    Sphere->Position.y = Position.y * WorldScale;
+    Sphere->Position.z = Position.z * WorldScale;
+    Sphere->Radius = Radius * WorldScale;
     Sphere->Color = Color;
     Sphere->Specular = Specular;
 }
@@ -134,20 +137,21 @@ void OnRender(const image &Image) {
 
     v3 Movement = 0.0f;
     {
+        constexpr f32 MovementSpeed = 0.5f * WorldScale;
         if (IsDown(key::W) || IsDown(key::ArrowUp)) {
-            Movement.z -= 0.5f;
+            Movement.z -= MovementSpeed;
         }
         if (IsDown(key::S) || IsDown(key::ArrowDown)) {
-            Movement.z += 0.5f;
+            Movement.z += MovementSpeed;
         }
         if (IsDown(key::D) || IsDown(key::ArrowRight)) {
-            Movement.x += 0.5f;
+            Movement.x += MovementSpeed;
         }
         if (IsDown(key::A) || IsDown(key::ArrowLeft)) {
-            Movement.x -= 0.5f;
+            Movement.x -= MovementSpeed;
         }
         if (IsDown(key::Space)) {
-            Movement.y += 0.5f;
+            Movement.y += MovementSpeed;
         }
 
         bool FlyDown = IsDown(key::C);
@@ -156,7 +160,7 @@ void OnRender(const image &Image) {
         FlyDown |= IsDown(key::LeftControl);
 #endif
         if (FlyDown) {
-            Movement.y -= 0.5f;
+            Movement.y -= MovementSpeed;
         }
         CameraPosition += Movement;
     }
@@ -218,13 +222,14 @@ void OnRender(const image &Image) {
                     v3x ProjectedPoint = v3x(RayDirection) * T;
 
                     const f32x &Radius = SphereGroup.Radii;
-                    f32x DistanceFromCenter = v3x::Length(SphereCenter - ProjectedPoint);
+                    const f32x RadiusSquared = Radius * Radius;
+                    f32x DistanceFromCenter = v3x::LengthSquared(SphereCenter - ProjectedPoint);
 
-                    f32x HitMask = DistanceFromCenter < Radius;
+                    f32x HitMask = DistanceFromCenter < RadiusSquared;
 
                     if (IsZero(HitMask)) continue;
 
-                    f32x X = f32x::SquareRoot(Radius * Radius - DistanceFromCenter * DistanceFromCenter);
+                    f32x X = f32x::SquareRoot(RadiusSquared - DistanceFromCenter);
 
                     f32x IntersectionT = T - X;
                     // f32x::ConditionalMove(&IntersectionT, T + X, IntersectionT < 0);

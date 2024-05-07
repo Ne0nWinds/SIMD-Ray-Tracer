@@ -286,7 +286,18 @@ inline v3x v3x::Normalize(const v3x &Value) {
     f32x LengthGreaterThanZeroMask = LengthSquared > F32Epsilon;
 
     f32x Length = f32x::SquareRoot(LengthSquared);
-    v3x Result = Value * f32x::Reciprocal(Length);
+    v3x Result = Value / Length;
+
+    v3x MaskedResult = Result & LengthGreaterThanZeroMask;
+    return MaskedResult;
+}
+inline v3x v3x::NormalizeFast(const v3x &Value) {
+    f32x LengthSquared = v3x::LengthSquared(Value);
+
+    f32x LengthGreaterThanZeroMask = LengthSquared > F32Epsilon;
+
+    f32x InverseLength = f32x::InverseSquareRoot(LengthSquared);
+    v3x Result = Value * InverseLength;
 
     v3x MaskedResult = Result & LengthGreaterThanZeroMask;
     return MaskedResult;
@@ -351,6 +362,10 @@ MATHCALL f32x8 operator~(const f32x8 &A) {
 }
 inline f32x8 f32x8::SquareRoot(const f32x8 &A) {
     ymm Result = _mm256_sqrt_ps(ymm(A));
+    return (f32x8)Result;
+}
+inline f32x8 f32x8::InverseSquareRoot(const f32x8 &A) {
+    ymm Result = _mm256_rsqrt_ps(ymm(A));
     return (f32x8)Result;
 }
 inline f32x8 f32x8::Min(const f32x8 &A, const f32x8 &B) {

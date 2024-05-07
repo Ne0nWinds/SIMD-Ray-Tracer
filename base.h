@@ -566,6 +566,7 @@ struct f32x8 {
     }
 
     static inline f32x8 SquareRoot(const f32x8 &A);
+    static inline f32x8 InverseSquareRoot(const f32x8 &A);
     static inline f32x8 Min(const f32x8 &A, const f32x8 &B);
     static inline f32x8 Max(const f32x8 &A, const f32x8 &B);
     static inline f32x8 Reciprocal(const f32x8 &A);
@@ -679,6 +680,7 @@ struct v3x8 {
     static inline f32x Length(const v3x8 &A);
     static inline f32x LengthSquared(const v3x8 &A);
     static inline v3x8 Normalize(const v3x8 &A);
+    static inline v3x8 NormalizeFast(const v3x8 &A);
     static inline void ConditionalMove(v3x8 *A, const v3x8 &B, const f32x8 &MoveMask);
 };
 MATHCALL v3x8 operator+(const v3x8 &A, const v3x8 &B) {

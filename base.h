@@ -48,7 +48,7 @@ struct string8 {
 
 /* == Macros == */
 
-#define array_len(arr) (sizeof(arr) / sizeof(*arr)) 
+#define array_len(arr) (sizeof(arr) / sizeof(*arr))
 
 #ifndef SIMD_WIDTH
     #if defined(__AVX2__)
@@ -334,7 +334,7 @@ MATHCALL v2 operator/(const v2 &A, const v2 &B);
 
 struct v3 {
     f32 x = 0.0f, y = 0.0f, z = 0.0f;
-    inline v3() { };
+    constexpr inline v3() { };
 
     constexpr inline v3(const f32 &&X) : x(X), y(X), z(X) { };
     constexpr inline v3(const f32 &&X, const f32 &&Y, const f32 &&Z) : x(X), y(Y), z(Z) { };
@@ -548,7 +548,7 @@ struct f32x8 {
     f32 Value[8];
 
     inline f32x8() { }
-    inline f32x8(const f32 V) {
+    inline constexpr f32x8(const f32 V) {
         for (u32 i = 0; i < array_len(Value); ++i) {
             Value[i] = V;
         }
@@ -606,6 +606,9 @@ struct u32x8 {
             Value[i] = V;
         }
     }
+    explicit inline u32x8(const f32x8 &V) {
+        __builtin_memcpy(Value, V.Value, sizeof(V.Value));
+    }
 
     inline u32 &operator[](u32 Index) {
         Assert(Index < array_len(Value));
@@ -616,6 +619,8 @@ struct u32x8 {
         Assert(Index < array_len(Value));
         return Value[Index];
     }
+
+    static inline void ConditionalMove(u32x8 *A, const u32x8 &B, const u32x8 &MoveMask);
 } __attribute__((__vector_size__(32), __aligned__(32)));
 
 MATHCALL u32x8 operator+(const u32x8 &A, const u32x8 &B);
@@ -867,7 +872,7 @@ constexpr static u32 F32SignBit = 0x8000'0000;
 #define RANDOM_ALGORITHM_XORSHIFT 2
 #define RANDOM_ALGORITHM_LCG 3
 
-static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_PCG;
+static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_LCG;
 
 struct u32x_random_state {
     u32x Seed;
@@ -910,32 +915,32 @@ struct u32x_random_state {
 struct u32_random_state {
     u64 Seed;
 
-    inline u32 PCG() {
+    constexpr inline u32 PCG() {
         u64 OldSeed = Seed;
         Seed = Seed * 6364136223846793005ULL + 1442695040888963407ULL;
         u32 Result = RotateRight32((u32)(OldSeed >> 32) ^ (u32)OldSeed, OldSeed >> 59);
         return Result;
     }
-    inline u32 XorShift() {
+    constexpr inline u32 XorShift() {
         u64 Result = Seed;
         Seed ^= Seed >> 12;
         Seed ^= Seed << 25;
         Seed ^= Seed >> 27;
         return (Result * 0x2545F4914F6CDD1DULL) >> 32;
     }
-    inline u32 LCG() {
+    constexpr inline u32 LCG() {
         u32 Result = this->Seed;
         Seed = Seed * 6364136223846793005ULL + 1442695040888963407ULL;
         return Result;
     }
-    inline u32 RandomInt() {
+    constexpr inline u32 RandomInt() {
         switch (DefaultRandomAlgorithm) {
             case RANDOM_ALGORITHM_PCG: return this->PCG();
             case RANDOM_ALGORITHM_XORSHIFT: return this->XorShift();
             case RANDOM_ALGORITHM_LCG: return this->LCG();
         }
     }
-    inline f32 RandomFloat(f32 Min = -1.0f, f32 Max = 1.0f) {
+    constexpr inline f32 RandomFloat(f32 Min = -1.0f, f32 Max = 1.0f) {
         u32 N = this->RandomInt();
         f32 InverseMaxInt = (Max - Min) / (f64)((u32)-1);
         f32 RandomFloat = (f32)N * InverseMaxInt;

@@ -313,6 +313,7 @@ union ymm {
     f32x8 Vector8;
     u32x8 U32Vector8;
     __m256 Register;
+
     inline ymm() { Register = _mm256_setzero_ps(); };
     inline ymm(const f32x8 &Value) : Vector8(Value) { };
     inline ymm(const u32x8 &Value) : U32Vector8(Value) { };
@@ -487,6 +488,10 @@ MATHCALL u32x8 operator>>(const u32x8 &A, const u32 &&B) {
 MATHCALL u32x8 operator<<(const u32x8 &A, const u32 &&B) {
     ymm Result = _mm256_slli_epi32(ymm(A), B);
     return (u32x8)Result;
+}
+inline void u32x8::ConditionalMove(u32x8 *A, const u32x8 &B, const u32x8 &MoveMask) {
+    ymm BlendedResult = _mm256_blendv_ps(ymm(*A), ymm(B), ymm(MoveMask));
+    *A = (u32x8)BlendedResult;
 }
 #endif
 

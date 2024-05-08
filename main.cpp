@@ -8,6 +8,7 @@ struct scalar_sphere {
     f32 Radius;
     v3 Color;
     f32 Specular;
+    v3 Emissive;
 };
 struct sphere_group {
     v3x Positions;
@@ -15,33 +16,61 @@ struct sphere_group {
 };
 struct material {
     v3 Color;
+    v3 Emissive;
     f32 Specular;
 };
 
-static scalar_sphere ScalarSpheres[8];
+static scalar_sphere ScalarSpheres[128];
 static sphere_group Spheres[array_len(ScalarSpheres) / SIMD_WIDTH];
-static material Materials[array_len(ScalarSpheres)];
+static material Materials[array_len(ScalarSpheres) + 1];
 static u32_random_state RandomState = { 0x4d595df4d0f33173ULL };
 
 static constexpr f32 WorldScale = 1.0f / 8.0f;
-constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v3 &Color, f32 Specular, scalar_sphere *Sphere) {
+constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v3 &Color, f32 Specular, const v3 &Emissive, scalar_sphere *Sphere) {
     Sphere->Position.x = Position.x * WorldScale;
     Sphere->Position.y = Position.y * WorldScale;
     Sphere->Position.z = Position.z * WorldScale;
     Sphere->Radius = Radius * WorldScale;
     Sphere->Color = Color;
     Sphere->Specular = Specular;
+    Sphere->Emissive = Emissive;
 }
 
-static constexpr inline void InitScalarSpheres(scalar_sphere *ScalarSpheres) {
-    CreateScalarSphere(v3(0.0f, 0.0f, -15.0f), 2.0f, v3(1.0f, 0.125f, 0.0f), 1.0f, ScalarSpheres + 0);
-    CreateScalarSphere(v3(0.0f, -130.0f, -15.0f), 128.0f, v3(0.2f), 0.0f, ScalarSpheres + 1);
-    CreateScalarSphere(v3(5.0f, 2.0f, -25.0f), 2.0f, v3(0.0f, 0.0f, 1.0f), 1.0f, ScalarSpheres + 2);
-    CreateScalarSphere(v3(6.0f, 6.0f, -18.0f), 2.0f, v3(0.75f, 0.85f, 0.125f), 1.0f, ScalarSpheres + 3);
-    CreateScalarSphere(v3(-7.0f, -0.5f, -25.0f), 1.25f, v3(1.0f, 0.5f, 0.0f), 0.95f, ScalarSpheres + 4);
-    CreateScalarSphere(v3(7.0f, 6.0f, -30.0f), 3.0f, v3(0.125f, 0.5f, 0.2f), 1.0f, ScalarSpheres + 5);
-    CreateScalarSphere(v3(-3.0f, 3.0f, -30.0f), 2.5f, v3(0.25f, 0.15f, 0.12f), 1.0f, ScalarSpheres + 6);
-    CreateScalarSphere(v3(-12.0f, 3.0f, -45.0f), 1.0f, v3(0.65f, 0.25f, 0.42f), 0.0f, ScalarSpheres + 7);
+static constexpr inline void InitScalarSpheres(scalar_sphere *SpheresArray) {
+    // CreateScalarSphere(v3(0.0f, 0.0f, -15.0f), 2.0f, v3(1.0f, 0.125f, 0.0f), 1.0f, ScalarSpheres + 0);
+    // CreateScalarSphere(v3(0.0f, -130.0f, -15.0f), 128.0f, v3(0.2f), 0.0f, ScalarSpheres + 1);
+    // CreateScalarSphere(v3(5.0f, 2.0f, -25.0f), 2.0f, v3(0.0f, 0.0f, 1.0f), 1.0f, ScalarSpheres + 2);
+    // CreateScalarSphere(v3(6.0f, 6.0f, -18.0f), 2.0f, v3(0.75f, 0.85f, 0.125f), 1.0f, ScalarSpheres + 3);
+    // CreateScalarSphere(v3(-7.0f, -0.5f, -25.0f), 1.25f, v3(1.0f, 0.5f, 0.0f), 0.95f, ScalarSpheres + 4);
+    // CreateScalarSphere(v3(7.0f, 6.0f, -30.0f), 3.0f, v3(0.125f, 0.5f, 0.2f), 1.0f, ScalarSpheres + 5);
+    // CreateScalarSphere(v3(-3.0f, 3.0f, -30.0f), 2.5f, v3(0.25f, 0.15f, 0.12f), 1.0f, ScalarSpheres + 6);
+    // CreateScalarSphere(v3(-12.0f, 3.0f, -45.0f), 1.0f, v3(0.65f, 0.25f, 0.42f), 0.0f, ScalarSpheres + 7);
+    
+    u32_random_state RandomState = { 0xCD46749A57ACB371 };
+    constexpr u32 Length = array_len(ScalarSpheres);
+    for (u32 i = 0; i < Length; ++i) {
+        v3 Position;
+        Position.x = RandomState.RandomFloat(-32.0f, 32.0f);
+        Position.y = RandomState.RandomFloat(-32.0f, 32.0f);
+        Position.z = RandomState.RandomFloat(-32.0f, 32.0f);
+
+        f32 Radius = RandomState.RandomFloat(0.25f, 5.0f);
+
+        v3 Color;
+        Color.x = RandomState.RandomFloat(0.1f, 1.0f);
+        Color.y = RandomState.RandomFloat(0.1f, 1.0f);
+        Color.z = RandomState.RandomFloat(0.1f, 1.0f);
+
+        v3 Emissive = 0.0f;
+        f32 Specular = 0.0f;
+        if (RandomState.RandomFloat(0.0f) < 0.25f) {
+            Emissive = RandomState.RandomFloat(0.0f, 5.0f) * Color;
+        } else {
+            Specular = RandomState.RandomFloat() > 0.0f ? 1.0f : 0.0f;
+        }
+
+        CreateScalarSphere(Position, Radius, Color, Specular, Emissive, SpheresArray + i);
+    }
 }
 
 static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * const Spheres, u32 ScalarLength, sphere_group *SIMDSpheres) {
@@ -56,10 +85,11 @@ static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * co
             SphereGroup.Positions[j] = Position;
         }
         for (u32 j = 0; j < SIMD_WIDTH; ++j) {
-            const v3 &Color = Spheres[i + j].Color;
-            const f32 &Specular = Spheres[i + j].Specular;
-            Materials[i + j].Color = Color;
-            Materials[i + j].Specular = Specular;
+            scalar_sphere Sphere = Spheres[i + j];
+            material &Material = Materials[i + j + 1];
+            Material.Color = Sphere.Color;
+            Material.Specular = Sphere.Specular;
+            Material.Emissive = Sphere.Emissive;
         }
     }
 }
@@ -162,6 +192,11 @@ void OnRender(const image &Image) {
         if (FlyDown) {
             Movement.y -= MovementSpeed;
         }
+
+        if (IsDown(key::LeftShift)) {
+            Movement *= 4.0f;
+        }
+
         CameraPosition += Movement;
     }
 
@@ -204,11 +239,11 @@ void OnRender(const image &Image) {
             v3 RayOrigin = CameraPosition;
             v3 RayDirection = v3::Normalize(FilmP - RayOrigin);
 
-            u32 MaxRayBounce = 6;
+            u32 MaxRayBounce = 8;
             for (u32 i = 0; i < MaxRayBounce; ++i) {
                 f32 A = (RayDirection.y + 1.0f) * 0.5f;
-                const v3 DefaultColor = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
-                v3x HitEmissive = DefaultColor;
+                // Materials[0].Emissive = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
+
                 v3x HitNormal = 0.0f;
                 v3x NextRayOrigin = 0.0f;
                 f32x MinT = F32Max;
@@ -239,16 +274,16 @@ void OnRender(const image &Image) {
                     f32x MoveMask = MinMask & HitMask;
 
                     v3x Normal = (IntersectionPoint - SphereCenter) * f32x::Reciprocal(Radius);
+                    u32x::ConditionalMove(&MaterialIndex, s + 1, u32x(MoveMask));
                     f32x::ConditionalMove(&MinT, IntersectionT, MoveMask);
                     v3x::ConditionalMove(&HitNormal, Normal, MoveMask);
-                    v3x::ConditionalMove(&HitEmissive, 0, MoveMask);
                     v3x::ConditionalMove(&NextRayOrigin, RayOrigin + IntersectionPoint, MoveMask);
                 }
 
                 u32 Index = f32x::HorizontalMinIndex(MinT);
-                OutputColor += v3(HitEmissive[Index]) * Attenuation;
 
-                const material &Material = Materials[Index];
+                const material &Material = Materials[Index + MaterialIndex[Index]];
+                OutputColor += Material.Emissive * Attenuation;
                 Attenuation *= Material.Color;
                 RayOrigin = v3(NextRayOrigin[Index]);
 
@@ -258,7 +293,7 @@ void OnRender(const image &Image) {
                 v3 RandomV3 = v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat());
                 v3 RandomBounce = Normal + RandomV3;
                 RayDirection = (1.0 - Specular) * RandomBounce + (Specular * PureBounce);
-                RayDirection = v3::Normalize(RayDirection);
+                RayDirection = v3::NormalizeFast(RayDirection);
 
                 if (MinT[Index] == F32Max) break;
             }

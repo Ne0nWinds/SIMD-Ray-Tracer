@@ -317,7 +317,7 @@ v2 GetMouseWheelDelta();
 
 
 struct v2 {
-    f32 x = 0.0f, y = 0.0f;
+    f32 x, y;
     inline v2() { };
     inline v2(f32 X);
     inline v2(f32 X, f32 Y);
@@ -333,8 +333,8 @@ MATHCALL v2 operator*(const v2 &A, const v2 &B);
 MATHCALL v2 operator/(const v2 &A, const v2 &B);
 
 struct v3 {
-    f32 x = 0.0f, y = 0.0f, z = 0.0f;
-    constexpr inline v3() { };
+    f32 x, y, z;
+    inline v3() { };
 
     constexpr inline v3(const f32 &&X) : x(X), y(X), z(X) { };
     constexpr inline v3(const f32 &&X, const f32 &&Y, const f32 &&Z) : x(X), y(Y), z(Z) { };
@@ -369,7 +369,7 @@ MATHCALL void operator/=(v3 &A, const v3 &B) {
 }
 
 struct v4 {
-    f32 x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f;
+    f32 x, y, z, w;
     inline v4() { };
     inline v4(f32 X);
     inline v4(f32 X, f32 Y, f32 Z, f32 W);
@@ -468,6 +468,7 @@ struct f32x4 {
     }
 
     static inline f32x4 SquareRoot(const f32x4 &A);
+    static inline f32x4 InverseSquareRoot(const f32x4 &A);
     static inline f32x4 Min(const f32x4 &A, const f32x4 &B);
     static inline f32x4 Max(const f32x4 &A, const f32x4 &B);
     static inline f32x4 Reciprocal(const f32x4 &A);
@@ -500,6 +501,10 @@ struct u32x4 {
         }
     }
 
+    explicit inline u32x4(const f32x4 &V) {
+        __builtin_memcpy(Value, V.Value, sizeof(V.Value));
+    }
+
     inline u32 &operator[](u32 Index) {
         Assert(Index < array_len(Value));
         return Value[Index];
@@ -509,6 +514,8 @@ struct u32x4 {
         Assert(Index < array_len(Value));
         return Value[Index];
     }
+
+    static inline void ConditionalMove(u32x4 *A, const u32x4 &B, const u32x4 &MoveMask);
 } __attribute__((__vector_size__(16), __aligned__(16)));
 
 MATHCALL u32x4 operator+(const u32x4 &A, const u32x4 &B);
@@ -548,7 +555,7 @@ struct f32x8 {
     f32 Value[8];
 
     inline f32x8() { }
-    inline constexpr f32x8(const f32 V) {
+    inline constexpr f32x8(const f32 V) : Value() {
         for (u32 i = 0; i < array_len(Value); ++i) {
             Value[i] = V;
         }
@@ -798,6 +805,7 @@ struct v3x4 {
     static inline f32x4 Length(const v3x4 &A);
     static inline f32x4 LengthSquared(const v3x4 &A);
     static inline v3x4 Normalize(const v3x4 &A);
+    static inline v3x4 NormalizeFast(const v3x4 &A);
     static inline void ConditionalMove(v3x4 *A, const v3x4 &B, const f32x4 &MoveMask);
 };
 MATHCALL v3x4 operator+(const v3x4 &A, const v3x4 &B) {

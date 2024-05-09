@@ -49,14 +49,14 @@ static constexpr inline void InitScalarSpheres(scalar_sphere *SpheresArray) {
     u32_random_state RandomState = { 0xCD46749A57ACB371 };
     constexpr u32 Length = array_len(ScalarSpheres);
     for (u32 i = 0; i < Length; ++i) {
-        v3 Position;
+        v3 Position = 0.0f;
         Position.x = RandomState.RandomFloat(-32.0f, 32.0f);
         Position.y = RandomState.RandomFloat(-32.0f, 32.0f);
         Position.z = RandomState.RandomFloat(-32.0f, 32.0f);
 
         f32 Radius = RandomState.RandomFloat(0.25f, 5.0f);
 
-        v3 Color;
+        v3 Color = 0.0f;
         Color.x = RandomState.RandomFloat(0.1f, 1.0f);
         Color.y = RandomState.RandomFloat(0.1f, 1.0f);
         Color.z = RandomState.RandomFloat(0.1f, 1.0f);
@@ -243,6 +243,7 @@ void OnRender(const image &Image) {
             for (u32 i = 0; i < MaxRayBounce; ++i) {
                 f32 A = (RayDirection.y + 1.0f) * 0.5f;
                 // Materials[0].Emissive = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
+                (void)A;
 
                 v3x HitNormal = 0.0f;
                 v3x NextRayOrigin = 0.0f;
@@ -274,7 +275,7 @@ void OnRender(const image &Image) {
                     f32x MoveMask = MinMask & HitMask;
 
                     v3x Normal = (IntersectionPoint - SphereCenter) * f32x::Reciprocal(Radius);
-                    u32x::ConditionalMove(&MaterialIndex, s + 1, u32x(MoveMask));
+                    u32x::ConditionalMove(&MaterialIndex, s * 8 + 1, u32x(MoveMask));
                     f32x::ConditionalMove(&MinT, IntersectionT, MoveMask);
                     v3x::ConditionalMove(&HitNormal, Normal, MoveMask);
                     v3x::ConditionalMove(&NextRayOrigin, RayOrigin + IntersectionPoint, MoveMask);
@@ -290,7 +291,7 @@ void OnRender(const image &Image) {
                 f32 Specular = Material.Specular;
                 v3 Normal = v3(HitNormal[Index]);
                 v3 PureBounce = RayDirection - 2.0f * v3::Dot(RayDirection, Normal) * Normal;
-                v3 RandomV3 = v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat());
+                v3 RandomV3 = v3::NormalizeFast(v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat()));
                 v3 RandomBounce = Normal + RandomV3;
                 RayDirection = (1.0 - Specular) * RandomBounce + (Specular * PureBounce);
                 RayDirection = v3::NormalizeFast(RayDirection);

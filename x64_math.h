@@ -8,6 +8,7 @@ union xmm {
     v3 Vector3;
     v4 Vector4;
     f32x4 Float4;
+    u32x4 Uint4;
     __m128 Register;
 
     inline xmm() { Register = _mm_setzero_ps(); }
@@ -16,6 +17,7 @@ union xmm {
     inline xmm(v3 Value) : Vector3(Value) { };
     inline xmm(const v4 &Value) : Vector4(Value) { };
     inline xmm(const f32x4 &Value) : Float4(Value) { };
+    inline xmm(const u32x4 &Value) : Uint4(Value) { };
     inline xmm(const __m128 &XMM) : Register(XMM) { };
 
     explicit operator f32() const { return Float; }
@@ -23,6 +25,7 @@ union xmm {
     explicit operator v3() const { return Vector3; }
     explicit operator v4() const { return Vector4; }
     explicit operator f32x4() const { return Float4; }
+    explicit operator u32x4() const { return Uint4; }
     operator __m128() const { return Register; }
 
     static inline xmm CreateMask(bool Value) {
@@ -499,6 +502,10 @@ inline f32x4 f32x4::SquareRoot(const f32x4 &A) {
     xmm Result = _mm_sqrt_ps(xmm(A));
     return (f32x4)Result;
 }
+inline f32x4 f32x4::InverseSquareRoot(const f32x4 &A) {
+    xmm Result = _mm_rsqrt_ps(xmm(A));
+    return (f32x4)Result;
+}
 inline f32x4 f32x4::Min(const f32x4 &A, const f32x4 &B) {
     xmm Result = _mm_min_ps(xmm(A), xmm(B));
     return (f32x4)Result;
@@ -587,4 +594,81 @@ MATHCALL bool IsZero(const f32x4 &Value) {
     xmm ComparisonResult = _mm_cmpneq_ps(xmm(Value), Zero);
     s32 MoveMask = _mm_movemask_ps(ComparisonResult);
     return MoveMask == 0;
+}
+
+
+
+MATHCALL u32x4 operator+(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_add_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator-(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_sub_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator*(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_mul_epu32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+
+MATHCALL u32x4 operator==(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_cmpeq_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator!=(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_cmpeq_epi32(xmm(A), xmm(B));
+    return ~(u32x4)Result;
+}
+MATHCALL u32x4 operator>(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_cmpgt_epi32(xmm(A), xmm(B)); // not technically correct
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator<(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_cmplt_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+
+MATHCALL u32x4 operator&(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_and_si128(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator|(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_or_si128(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator^(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_xor_si128(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator~(const u32x4 &A) {
+    xmm Ones = _mm_cmpeq_epi32(xmm(), xmm());
+    xmm Result = _mm_xor_si128(xmm(A), Ones);
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator>>(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_sll_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator<<(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_srl_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+
+MATHCALL u32x4 operator>>(const u32x4 &A, const u32 &&B) {
+    xmm Result = _mm_slli_epi32(xmm(A), B);
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator<<(const u32x4 &A, const u32 &&B) {
+    xmm Result = _mm_srli_epi32(xmm(A), B);
+    return (u32x4)Result;
+}
+
+inline void u32x4::ConditionalMove(u32x4 *A, const u32x4 &B, const u32x4 &MoveMask) {
+    u32x4 BlendedResult = (*A & ~MoveMask) | (B & MoveMask);
+    *A = (u32x4)BlendedResult;
+}
+
+inline f32x4::f32x4(const u32x4 &V) {
+    xmm Result = _mm_cvtepi32_ps(xmm(V));
+    *this = (f32x4)Result;
 }

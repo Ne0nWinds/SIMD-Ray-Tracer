@@ -334,10 +334,11 @@ MATHCALL v2 operator/(const v2 &A, const v2 &B);
 
 struct v3 {
     f32 x, y, z;
+    f32 _w;
     inline v3() { };
 
-    constexpr inline v3(const f32 &&X) : x(X), y(X), z(X) { };
-    constexpr inline v3(const f32 &&X, const f32 &&Y, const f32 &&Z) : x(X), y(Y), z(Z) { };
+    constexpr inline v3(const f32 &&X) : x(X), y(X), z(X), _w(0) { };
+    constexpr inline v3(const f32 &&X, const f32 &&Y, const f32 &&Z) : x(X), y(Y), z(Z), _w(0) { };
     inline v3(const f32 &X);
     inline v3(const f32 &X, const f32 &Y, const f32 &Z);
 
@@ -367,6 +368,8 @@ MATHCALL void operator*=(v3 &A, const v3 &B) {
 MATHCALL void operator/=(v3 &A, const v3 &B) {
     A = A / B;
 }
+
+MATHCALL v3 operator-(const v3 &A);
 
 struct v4 {
     f32 x, y, z, w;
@@ -880,7 +883,7 @@ constexpr static u32 F32SignBit = 0x8000'0000;
 #define RANDOM_ALGORITHM_XORSHIFT 2
 #define RANDOM_ALGORITHM_LCG 3
 
-static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_LCG;
+static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_PCG;
 
 struct u32x_random_state {
     u32x Seed;

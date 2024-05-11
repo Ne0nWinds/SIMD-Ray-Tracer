@@ -9,7 +9,9 @@ struct scalar_sphere {
     v3 Color;
     f32 Specular;
     v3 Emissive;
+    f32 IndexOfRefraction;
 };
+
 struct sphere_group {
     v3x Positions;
     f32x Radii;
@@ -18,6 +20,7 @@ struct material {
     v3 Color;
     v3 Emissive;
     f32 Specular;
+    f32 IndexOfRefraction;
 };
 
 static scalar_sphere ScalarSpheres[128];
@@ -25,8 +28,8 @@ static sphere_group Spheres[array_len(ScalarSpheres) / SIMD_WIDTH];
 static material Materials[array_len(ScalarSpheres) + 1];
 static u32_random_state RandomState = { 0x4d595df4d0f33173ULL };
 
-static constexpr f32 WorldScale = 1.0f / 8.0f;
-constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v3 &Color, f32 Specular, const v3 &Emissive, scalar_sphere *Sphere) {
+static constexpr f32 WorldScale = 1.0f / 16.0f;
+constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v3 &Color, f32 Specular, f32 IndexOfRefraction, const v3 &Emissive, scalar_sphere *Sphere) {
     Sphere->Position.x = Position.x * WorldScale;
     Sphere->Position.y = Position.y * WorldScale;
     Sphere->Position.z = Position.z * WorldScale;
@@ -34,25 +37,28 @@ constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v
     Sphere->Color = Color;
     Sphere->Specular = Specular;
     Sphere->Emissive = Emissive;
+    Sphere->IndexOfRefraction = IndexOfRefraction;
 }
 
 static constexpr inline void InitScalarSpheres(scalar_sphere *SpheresArray) {
-    // CreateScalarSphere(v3(0.0f, 0.0f, -15.0f), 2.0f, v3(1.0f, 0.125f, 0.0f), 1.0f, ScalarSpheres + 0);
-    // CreateScalarSphere(v3(0.0f, -130.0f, -15.0f), 128.0f, v3(0.2f), 0.0f, ScalarSpheres + 1);
-    // CreateScalarSphere(v3(5.0f, 2.0f, -25.0f), 2.0f, v3(0.0f, 0.0f, 1.0f), 1.0f, ScalarSpheres + 2);
-    // CreateScalarSphere(v3(6.0f, 6.0f, -18.0f), 2.0f, v3(0.75f, 0.85f, 0.125f), 1.0f, ScalarSpheres + 3);
-    // CreateScalarSphere(v3(-7.0f, -0.5f, -25.0f), 1.25f, v3(1.0f, 0.5f, 0.0f), 0.95f, ScalarSpheres + 4);
-    // CreateScalarSphere(v3(7.0f, 6.0f, -30.0f), 3.0f, v3(0.125f, 0.5f, 0.2f), 1.0f, ScalarSpheres + 5);
-    // CreateScalarSphere(v3(-3.0f, 3.0f, -30.0f), 2.5f, v3(0.25f, 0.15f, 0.12f), 1.0f, ScalarSpheres + 6);
-    // CreateScalarSphere(v3(-12.0f, 3.0f, -45.0f), 1.0f, v3(0.65f, 0.25f, 0.42f), 0.0f, ScalarSpheres + 7);
+#if 0
+    CreateScalarSphere(v3(0.0f, 0.0f, -15.0f), 2.0f, v3(1.0f), 1.0f, 1.5f, 0.0f, ScalarSpheres + 0);
+    CreateScalarSphere(v3(0.0f, -130.0f, -15.0f), 128.0f, v3(0.2f), 0.0f, 0.0f, 0.0f, ScalarSpheres + 1);
+    CreateScalarSphere(v3(5.0f, 2.0f, -25.0f), 2.0f, v3(0.0f, 0.0f, 1.0f), 1.0f, 0.0f, 0.0f, ScalarSpheres + 2);
+    CreateScalarSphere(v3(6.0f, 6.0f, -18.0f), 2.0f, v3(0.75f, 0.85f, 0.125f), 1.0f, 0.0f, 0.0f, ScalarSpheres + 3);
+    CreateScalarSphere(v3(-7.0f, -0.5f, -25.0f), 1.25f, v3(1.0f, 0.5f, 0.0f), 0.95f, 0.0f, 0.0f, ScalarSpheres + 4);
+    CreateScalarSphere(v3(7.0f, 6.0f, -30.0f), 3.0f, v3(0.125f, 0.5f, 0.2f), 1.0f, 0.0f, 0.0f, ScalarSpheres + 5);
+    CreateScalarSphere(v3(-3.0f, 3.0f, -30.0f), 2.5f, v3(0.25f, 0.15f, 0.12f), 1.0f, 0.0f, 0.0f, ScalarSpheres + 6);
+    CreateScalarSphere(v3(-12.0f, 3.0f, -45.0f), 1.0f, v3(0.65f, 0.25f, 0.42f), 0.0f, 0.0f, 0.0f, ScalarSpheres + 7);
     
+#elif 0
     u32_random_state RandomState = { 0xCD46749A57ACB371 };
     constexpr u32 Length = array_len(ScalarSpheres);
     for (u32 i = 0; i < Length; ++i) {
         v3 Position = 0.0f;
-        Position.x = RandomState.RandomFloat(-32.0f, 32.0f);
-        Position.y = RandomState.RandomFloat(-32.0f, 32.0f);
-        Position.z = RandomState.RandomFloat(-32.0f, 32.0f);
+        Position.x = RandomState.RandomFloat(-48.0f, 48.0f);
+        Position.y = RandomState.RandomFloat(-48.0f, 48.0f);
+        Position.z = RandomState.RandomFloat(-48.0f, 48.0f);
 
         f32 Radius = RandomState.RandomFloat(0.25f, 5.0f);
 
@@ -63,14 +69,29 @@ static constexpr inline void InitScalarSpheres(scalar_sphere *SpheresArray) {
 
         v3 Emissive = 0.0f;
         f32 Specular = 0.0f;
+        f32 IndexOfRefraction = 0.0f;
         if (RandomState.RandomFloat(0.0f) < 0.25f) {
-            Emissive = RandomState.RandomFloat(0.0f, 5.0f) * Color;
+            Emissive = RandomState.RandomFloat(1.0f, 5.0f) * Color;
         } else {
-            Specular = RandomState.RandomFloat() > 0.0f ? 1.0f : 0.0f;
+            f32 Random = RandomState.RandomFloat(0.0f);
+            if (Random < 0.25f) {
+                Color = 1.0f;
+                IndexOfRefraction = 1.5f;
+            } else {
+                Specular = Random > (0.75f / 2.0f) ? 1.0f : 0.0f;
+            }
         }
 
-        CreateScalarSphere(Position, Radius, Color, Specular, Emissive, SpheresArray + i);
+        CreateScalarSphere(Position, Radius, Color, Specular, IndexOfRefraction, Emissive, SpheresArray + i);
     }
+#else
+    CreateScalarSphere(v3(0.0f, -256 - 2.0f, -15.0f), 256.0f, v3(0.2f), 0.0f, 0.0f, 0.0f, ScalarSpheres + 0);
+    CreateScalarSphere(v3(0.0f, 0, -10.0f), 2.0f, v3(1.0f), 0.0f, 1.5f, 0.0f, ScalarSpheres + 1);
+
+    CreateScalarSphere(v3(-4.0f, 1.0f, -15.0f), 1.5f, v3(1.0f, 0.0f, 0.0f), 0.0f, 0, v3(8.0f, 0.0f, 0.0f), ScalarSpheres + 2);
+    CreateScalarSphere(v3(0.0f, 1.0f, -15.0f), 1.5f, v3(1.0f, 0.0f, 0.0f), 0.0f, 0, v3(0.0f, 8.0f, 0.0f), ScalarSpheres + 3);
+    CreateScalarSphere(v3(4.0f, 1.0f, -15.0f), 1.5f, v3(1.0f, 0.0f, 0.0f), 0.0f, 0, v3(0.0f, 0.0f, 8.0f), ScalarSpheres + 4);
+#endif
 }
 
 static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * const Spheres, u32 ScalarLength, sphere_group *SIMDSpheres) {
@@ -90,6 +111,7 @@ static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * co
             Material.Color = Sphere.Color;
             Material.Specular = Sphere.Specular;
             Material.Emissive = Sphere.Emissive;
+            Material.IndexOfRefraction = Sphere.IndexOfRefraction;
         }
     }
 }
@@ -162,6 +184,16 @@ static v4 LinearToSRGB(v4 L) {
 
 static u32 PreviousRayCount = 0;
 static image PreviousImage = {};
+
+static f32 Reflectance(f32 CosTheta, f32 RefractionIndex) {
+    f32 R0 = (1.0f - RefractionIndex) / (1.0f + RefractionIndex);
+    R0 *= R0;
+
+    f32 R1 = 1.0f - CosTheta;
+    R1 = R1 * R1 * R1 * R1 * R1;
+
+    return R0 + (1.0f - R0) * R1;
+}
 
 void OnRender(const image &Image) {
 
@@ -239,7 +271,7 @@ void OnRender(const image &Image) {
             v3 RayOrigin = CameraPosition;
             v3 RayDirection = v3::Normalize(FilmP - RayOrigin);
 
-            u32 MaxRayBounce = 8;
+            u32 MaxRayBounce = 5;
             for (u32 i = 0; i < MaxRayBounce; ++i) {
                 f32 A = (RayDirection.y + 1.0f) * 0.5f;
                 // Materials[0].Emissive = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
@@ -248,8 +280,8 @@ void OnRender(const image &Image) {
                 v3x HitNormal = 0.0f;
                 v3x NextRayOrigin = 0.0f;
                 f32x MinT = F32Max;
-
                 u32x MaterialIndex = 0;
+                f32x InsideSphere = 0;
 
                 for (u32 s = 0; s < array_len(Spheres); ++s) {
                     const sphere_group &SphereGroup = Spheres[s];
@@ -268,13 +300,16 @@ void OnRender(const image &Image) {
                     f32x X = f32x::SquareRoot(RadiusSquared - DistanceFromCenter);
 
                     f32x IntersectionT = T - X;
-                    // f32x::ConditionalMove(&IntersectionT, T + X, IntersectionT < 0);
+                    f32x IntersectionTest = IntersectionT < F32Epsilon;
+                    f32x::ConditionalMove(&InsideSphere, 1.0f, IntersectionTest);
+                    f32x::ConditionalMove(&IntersectionT, T + X, IntersectionTest);
 
-                    v3x IntersectionPoint = RayDirection * IntersectionT;
                     f32x MinMask = (IntersectionT < MinT) & (IntersectionT > F32Epsilon);
                     f32x MoveMask = MinMask & HitMask;
+                    if (IsZero(MoveMask)) continue;
 
-                    v3x Normal = (IntersectionPoint - SphereCenter) * f32x::Reciprocal(Radius);
+                    v3x IntersectionPoint = RayDirection * IntersectionT;
+                    v3x Normal = (IntersectionPoint - SphereCenter);
                     u32x::ConditionalMove(&MaterialIndex, s * 8 + 1, u32x(MoveMask));
                     f32x::ConditionalMove(&MinT, IntersectionT, MoveMask);
                     v3x::ConditionalMove(&HitNormal, Normal, MoveMask);
@@ -289,12 +324,35 @@ void OnRender(const image &Image) {
                 RayOrigin = v3(NextRayOrigin[Index]);
 
                 f32 Specular = Material.Specular;
-                v3 Normal = v3(HitNormal[Index]);
+                v3 Normal = v3::Normalize(v3(HitNormal[Index]));
+
                 v3 PureBounce = RayDirection - 2.0f * v3::Dot(RayDirection, Normal) * Normal;
-                v3 RandomV3 = v3::NormalizeFast(v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat()));
-                v3 RandomBounce = Normal + RandomV3;
-                RayDirection = (1.0 - Specular) * RandomBounce + (Specular * PureBounce);
-                RayDirection = v3::NormalizeFast(RayDirection);
+
+                if (Material.IndexOfRefraction == 0.0f) {
+                    v3 RandomV3 = v3::Normalize(v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat()));
+                    v3 RandomBounce = Normal + RandomV3;
+                    RayDirection = (1.0 - Specular) * RandomBounce + (Specular * PureBounce);
+                    RayDirection = v3::Normalize(RayDirection);
+                } else {
+
+                    bool RayOriginInSphere = InsideSphere[Index] != 0.0f;
+                    f32 RefractionIndex = (RayOriginInSphere) ? Material.IndexOfRefraction : 1.0f / Material.IndexOfRefraction;
+                    if (RayOriginInSphere) Normal = -Normal;
+
+                    f32 CosTheta = Min(v3::Dot(-RayDirection, Normal), 1.0f);
+                    f32 SinTheta = SquareRoot(1.0 - CosTheta * CosTheta);
+
+                    bool CantRefract = RefractionIndex * SinTheta > 1.0f;
+                    v3 Perpendicular = RefractionIndex * (RayDirection + CosTheta * Normal);
+                    v3 Parallel = -SquareRoot(Abs(1.0f - v3::Dot(Perpendicular, Perpendicular))) * Normal;
+                    v3 RefractedRay = v3::Normalize(Perpendicular + Parallel);
+
+                    if (CantRefract || Reflectance(CosTheta, RefractionIndex) > RandomState.RandomFloat(0.0f)) {
+                        RayDirection = PureBounce;
+                    } else {
+                        RayDirection = RefractedRay;
+                    }
+                }
 
                 if (MinT[Index] == F32Max) break;
             }

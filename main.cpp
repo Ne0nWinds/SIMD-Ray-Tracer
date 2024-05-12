@@ -116,7 +116,34 @@ static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * co
     }
 }
 
+struct thread_context {
+    u32_random_state RandomState;
+
+    v3 CameraPosition;
+    v3 CameraZ;
+    v3 CameraX;
+    v3 CameraY;
+    v3 FilmCenter;
+
+    u32 WindowWidth;
+    u32 WindowHeight;
+
+    f32 FilmW;
+    f32 FilmH;
+};
+
+static thread_context *ThreadContexts = 0;
+
+#pragma clang optimize off
+static void RenderTile(work_queue_context *WorkQueueContext) {
+
+    return;
+}
+#pragma clang optimize on
+
 static memory_arena RenderData;
+static memory_arena ThreadData;
+static work_queue WorkQueue;
 
 void OnInit(init_params *Params) {
     constexpr string8 WindowTitle = u8"Raytracing In One Weekend";
@@ -128,6 +155,24 @@ void OnInit(init_params *Params) {
     ConvertScalarSpheresToSIMDSpheres(ScalarSpheres, array_len(ScalarSpheres), Spheres);
 
     RenderData = AllocateArenaFromOS(MB(256));
+    ThreadData = AllocateArenaFromOS(KB(256));
+
+    u32 ThreadCount = GetProcessorThreadCount() - 2;
+    ThreadCount = 1;
+    ThreadContexts = (thread_context *)ThreadData.Push(sizeof(thread_context) * (ThreadCount + 1));
+    for (u32 i = 0; i < ThreadCount + 1; ++i) {
+        u64 InitialSeed = 0x420247153476526ULL * (u64)i;
+        InitialSeed += 0x8442885C91A5C8DULL;
+        InitialSeed ^= InitialSeed >> (7 + i);
+        InitialSeed ^= InitialSeed << 23;
+        InitialSeed ^= InitialSeed >> (0x29 ^ i);
+        InitialSeed = (InitialSeed * 0x11C19226CEB4769AULL) + 0x1105404122082911ULL;
+        InitialSeed ^= InitialSeed << 19;
+        InitialSeed ^= InitialSeed >> 13;
+        u32_random_state RandomState = { InitialSeed };
+        ThreadContexts[i].RandomState = RandomState;
+    }
+    WorkQueue.Create(&ThreadData, RenderTile, ThreadCount);
 }
 
 static inline constexpr u32 ColorFromV4(const v4 &Value) {
@@ -165,7 +210,7 @@ static f32 LinearToSRGB(f32 L) {
 		Result = 1.055f * powf(L, 1.0f / 2.4f) - 0.055f;
 #else
 		// bad but fast code
-		Result = 1.02f * SquareRoot(L);
+		Result = SquareRoot(L);
 #endif
 	}
 
@@ -254,6 +299,8 @@ void OnRender(const image &Image) {
     } else {
         FilmW = (f32)Image.Width / (f32)Image.Height;
     }
+
+    WorkQueue.Start(8);
 
 #if 1
     for (u32 y = 0; y < Image.Height; ++y) {
@@ -370,6 +417,8 @@ void OnRender(const image &Image) {
     }
 
     PreviousRayCount += 1;
+
+    WorkQueue.Wait();
 #else
         for (u32 y = 0; y < Image.Height; ++y) {
             for (u32 x = 0; x < Image.Width; ++x) {

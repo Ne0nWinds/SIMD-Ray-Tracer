@@ -52,6 +52,12 @@ union xmm {
     }
 };
 
+MATHCALL u32 Min(u32 A, u32 B) {
+	u32 DOZ = (A - B) & -(A >= B);
+	u32 Result = A - DOZ;
+	return Result;
+}
+
 MATHCALL f32 Abs(f32 Value) {
     constexpr u32 SignBitU32 = ~F32SignBit;
     xmm SignBit = _mm_set1_ps(*(f32 *)&SignBitU32);

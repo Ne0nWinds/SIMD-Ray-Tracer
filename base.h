@@ -156,6 +156,24 @@ struct init_params {
 void OnInit(init_params *Params);
 void OnRender(const image &Image);
 
+
+struct work_queue_context {
+    u32 WorkEntry;
+    u32 ThreadIndex;
+    void *Data;
+};
+typedef void (*thread_callback)(work_queue_context *);
+
+u32 GetProcessorThreadCount();
+
+struct work_queue {
+    void *OSData;
+
+    void Create(memory_arena *Arena, thread_callback ThreadCallback, u32 Count);
+    void Start(u32 WorkItemCount);
+    void Wait();
+};
+
 enum class key : u32 {
     Escape = 0x1,
 	One,
@@ -883,7 +901,7 @@ constexpr static u32 F32SignBit = 0x8000'0000;
 #define RANDOM_ALGORITHM_XORSHIFT 2
 #define RANDOM_ALGORITHM_LCG 3
 
-static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_PCG;
+static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_XORSHIFT;
 
 struct u32x_random_state {
     u32x Seed;

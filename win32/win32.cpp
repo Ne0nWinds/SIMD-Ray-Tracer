@@ -14,7 +14,7 @@ static u32 GLTextureHandle;
 static HDC DeviceContext;
 
 static u64 AllocationGranularity;
-static u64 NumberOfCPUs;
+static u64 NumberOfProcessors;
 static LARGE_INTEGER PerformanceFrequency;
 
 static u64 KeyboardState[2];
@@ -169,9 +169,9 @@ static void InitOSProperties() {
         SYSTEM_INFO SystemInfo;
         GetSystemInfo(&SystemInfo);
         AllocationGranularity = SystemInfo.dwAllocationGranularity;
-        NumberOfCPUs = SystemInfo.dwNumberOfProcessors;
+        NumberOfProcessors = SystemInfo.dwNumberOfProcessors;
         Assert(PopCount(AllocationGranularity) == 1);
-        Assert(NumberOfCPUs >= 1);
+        Assert(NumberOfProcessors >= 1);
     }
 
     {
@@ -189,6 +189,91 @@ static void InitOSProperties() {
         Assert(Success);
         (void)Success;
     }
+}
+
+u32 GetProcessorThreadCount() {
+    return NumberOfProcessors;
+}
+
+struct thread_function_data;
+
+struct win32_work_queue_data {
+    volatile LONG WorkIndex;
+    volatile LONG WorkCompleted;
+    u32 WorkItemCount;
+
+    thread_callback ThreadCallback;
+    u32 ThreadCount;
+    HANDLE *ThreadHandles;
+    thread_function_data *ThreadData;
+    HANDLE Semaphore;
+};
+
+struct thread_function_data {
+    win32_work_queue_data *OSData;
+    u32 ThreadIndex;
+    void *CustomData;
+};
+
+static u32 ThreadFunction(thread_function_data *Context) {
+    win32_work_queue_data *Data = Context->OSData;
+    for (;;) {
+        LONG WorkEntry = InterlockedIncrement(&Data->WorkIndex);
+        WorkEntry -= 1;
+        bool Continue = WorkEntry < Data->WorkItemCount;
+
+        if (Continue) {
+            u32 ThreadIndex = Context->ThreadIndex;
+            work_queue_context ThreadCallbackContext = {
+                .WorkEntry = (u32)WorkEntry,
+                .ThreadIndex = (u32)ThreadIndex,
+                .Data = Context->CustomData
+            };
+
+            Data->ThreadCallback(&ThreadCallbackContext);
+            Data->WorkCompleted += 1;
+        } else {
+            WaitForSingleObject(Data->Semaphore, INFINITE);
+        }
+    }
+}
+
+void work_queue::Create(memory_arena *Arena, thread_callback ThreadCallback, u32 Count) {
+    win32_work_queue_data *WorkQueueData = 0;
+    WorkQueueData = (win32_work_queue_data *)Arena->Push(sizeof(win32_work_queue_data));
+    WorkQueueData->Semaphore = CreateSemaphore(NULL, Count, Count, 0);
+
+    WorkQueueData->ThreadHandles = (HANDLE *)Arena->Push(sizeof(HANDLE) * Count);
+    WorkQueueData->ThreadData = (thread_function_data *)Arena->Push(sizeof(thread_function_data) * Count);
+    for (u32 i = 0; i < Count; ++i) {
+        thread_function_data *Data = WorkQueueData->ThreadData + i;
+        Data->OSData = WorkQueueData;
+        Data->ThreadIndex = i;
+        WorkQueueData->ThreadHandles[i] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&ThreadFunction, Data, 0, 0);
+    }
+
+    WorkQueueData->ThreadCallback = ThreadCallback;
+    WorkQueueData->WorkIndex = 0;
+    WorkQueueData->WorkCompleted = 0;
+    WorkQueueData->ThreadCount = Count;
+    this->OSData = WorkQueueData;
+}
+
+#define MemoryFenceLoad() _mm_lfence()
+#define MemoryFenceStore() _mm_sfence()
+
+void work_queue::Start(u32 WorkItemCount) {
+    win32_work_queue_data *WorkQueueData = (win32_work_queue_data *)this->OSData;
+    WorkQueueData->WorkItemCount = WorkItemCount;
+    WorkQueueData->WorkIndex = 0;
+    MemoryFenceStore();
+    LONG PreviousCount = -1;
+    BOOL Success = ReleaseSemaphore(WorkQueueData->Semaphore, WorkQueueData->ThreadCount, &PreviousCount);
+    Assert(Success);
+}
+void work_queue::Wait() {
+    win32_work_queue_data *WorkQueueData = (win32_work_queue_data *)this->OSData;
+    while (WorkQueueData->WorkCompleted < WorkQueueData->WorkItemCount);
 }
 
 /* == Input == */

@@ -259,6 +259,13 @@ void work_queue::Create(memory_arena *Arena, thread_callback ThreadCallback, u32
     this->OSData = WorkQueueData;
 }
 
+u32 work_queue::GetNextWorkEntry() {
+    win32_work_queue_data *Data = (win32_work_queue_data *)this->OSData;
+    LONG WorkEntry = InterlockedIncrement(&Data->WorkIndex);
+    WorkEntry -= 1;
+    return (u32)WorkEntry;
+}
+
 #define MemoryFenceLoad() _mm_lfence()
 #define MemoryFenceStore() _mm_sfence()
 

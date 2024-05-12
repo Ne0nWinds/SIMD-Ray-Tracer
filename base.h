@@ -171,6 +171,7 @@ struct work_queue {
 
     void Create(memory_arena *Arena, thread_callback ThreadCallback, u32 Count);
     void Start(u32 WorkItemCount);
+    u32 GetNextWorkEntry();
     void Wait();
 };
 

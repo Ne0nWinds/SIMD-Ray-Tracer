@@ -348,7 +348,6 @@ void OnRender(const image &Image) {
 
                     f32x IntersectionT = T - X;
                     f32x IntersectionTest = IntersectionT < F32Epsilon;
-                    f32x::ConditionalMove(&InsideSphere, 1.0f, IntersectionTest);
                     f32x::ConditionalMove(&IntersectionT, T + X, IntersectionTest);
 
                     f32x MinMask = (IntersectionT < MinT) & (IntersectionT > F32Epsilon);
@@ -357,6 +356,7 @@ void OnRender(const image &Image) {
 
                     v3x IntersectionPoint = RayDirection * IntersectionT;
                     v3x Normal = (IntersectionPoint - SphereCenter);
+                    f32x::ConditionalMove(&InsideSphere, 1.0f, IntersectionTest & MoveMask);
                     u32x::ConditionalMove(&MaterialIndex, s * 8 + 1, u32x(MoveMask));
                     f32x::ConditionalMove(&MinT, IntersectionT, MoveMask);
                     v3x::ConditionalMove(&HitNormal, Normal, MoveMask);
@@ -364,6 +364,7 @@ void OnRender(const image &Image) {
                 }
 
                 u32 Index = f32x::HorizontalMinIndex(MinT);
+                if (MinT[Index] == F32Max) break;
 
                 const material &Material = Materials[Index + MaterialIndex[Index]];
                 OutputColor += Material.Emissive * Attenuation;
@@ -384,7 +385,9 @@ void OnRender(const image &Image) {
 
                     bool RayOriginInSphere = InsideSphere[Index] != 0.0f;
                     f32 RefractionIndex = (RayOriginInSphere) ? Material.IndexOfRefraction : 1.0f / Material.IndexOfRefraction;
-                    if (RayOriginInSphere) Normal = -Normal;
+                    if (RayOriginInSphere) {
+                        Normal = -Normal;
+                    }
 
                     f32 CosTheta = Min(v3::Dot(-RayDirection, Normal), 1.0f);
                     f32 SinTheta = SquareRoot(1.0 - CosTheta * CosTheta);
@@ -394,14 +397,12 @@ void OnRender(const image &Image) {
                     v3 Parallel = -SquareRoot(Abs(1.0f - v3::Dot(Perpendicular, Perpendicular))) * Normal;
                     v3 RefractedRay = v3::Normalize(Perpendicular + Parallel);
 
-                    if (CantRefract || Reflectance(CosTheta, RefractionIndex) > RandomState.RandomFloat(0.0f)) {
+                    if ((CantRefract || Reflectance(CosTheta, RefractionIndex) > RandomState.RandomFloat(0.0f)) && !RayOriginInSphere) {
                         RayDirection = PureBounce;
                     } else {
                         RayDirection = RefractedRay;
                     }
                 }
-
-                if (MinT[Index] == F32Max) break;
             }
 
             u32 TotalRayCount = PreviousRayCount + 1;

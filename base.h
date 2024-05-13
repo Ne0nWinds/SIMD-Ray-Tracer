@@ -160,7 +160,6 @@ void OnRender(const image &Image);
 struct work_queue_context {
     u32 WorkEntry;
     u32 ThreadIndex;
-    void *Data;
 };
 typedef void (*thread_callback)(work_queue_context *);
 
@@ -171,7 +170,6 @@ struct work_queue {
 
     void Create(memory_arena *Arena, thread_callback ThreadCallback, u32 Count);
     void Start(u32 WorkItemCount);
-    u32 GetNextWorkEntry();
     void Wait();
 };
 
@@ -947,7 +945,11 @@ struct u32_random_state {
 
     constexpr inline u32 PCG() {
         u64 OldSeed = Seed;
+#if 1
         Seed = Seed * 6364136223846793005ULL + 1442695040888963407ULL;
+#else
+        Seed = Seed * 6364136223846793005ULL;
+#endif
         u32 Result = RotateRight32((u32)(OldSeed >> 32) ^ (u32)OldSeed, OldSeed >> 59);
         return Result;
     }

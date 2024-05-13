@@ -2,6 +2,8 @@
 #include "base.h"
 
 static v3 CameraPosition;
+static u32 PreviousRayCount = 0;
+static constexpr u32 TileSize = 32;
 
 struct scalar_sphere {
     v3 Position;
@@ -116,73 +118,42 @@ static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * co
     }
 }
 
-struct thread_context {
-    u32_random_state RandomState;
-
+struct camera_info {
     v3 CameraPosition;
     v3 CameraZ;
     v3 CameraX;
     v3 CameraY;
     v3 FilmCenter;
-
-    u32 WindowWidth;
-    u32 WindowHeight;
-
     f32 FilmW;
     f32 FilmH;
+    u32 TilesX;
+
+    image Image;
+    image PreviousImage;
 };
 
+struct thread_context {
+    u32_random_state RandomState;
+    // camera_info *CameraInfo;
+}__attribute__((__aligned__(64)));
+
+static camera_info CameraInfo = {};
 static thread_context *ThreadContexts = 0;
 
-#pragma clang optimize off
-static void RenderTile(work_queue_context *WorkQueueContext) {
+static f32 Reflectance(f32 CosTheta, f32 RefractionIndex) {
+    f32 R0 = (1.0f - RefractionIndex) / (1.0f + RefractionIndex);
+    R0 *= R0;
 
-    return;
-}
-#pragma clang optimize on
+    f32 R1 = 1.0f - CosTheta;
+    R1 = R1 * R1 * R1 * R1 * R1;
 
-static memory_arena RenderData;
-static memory_arena ThreadData;
-static work_queue WorkQueue;
-
-void OnInit(init_params *Params) {
-    constexpr string8 WindowTitle = u8"Raytracing In One Weekend";
-    Params->WindowTitle = WindowTitle;
-    Params->WindowWidth = 1280;
-    Params->WindowHeight = 720;
-
-    InitScalarSpheres(ScalarSpheres);
-    ConvertScalarSpheresToSIMDSpheres(ScalarSpheres, array_len(ScalarSpheres), Spheres);
-
-    RenderData = AllocateArenaFromOS(MB(256));
-    ThreadData = AllocateArenaFromOS(KB(256));
-
-    u32 ThreadCount = GetProcessorThreadCount() - 2;
-    ThreadCount = 1;
-    ThreadContexts = (thread_context *)ThreadData.Push(sizeof(thread_context) * (ThreadCount + 1));
-    for (u32 i = 0; i < ThreadCount + 1; ++i) {
-        u64 InitialSeed = 0x420247153476526ULL * (u64)i;
-        InitialSeed += 0x8442885C91A5C8DULL;
-        InitialSeed ^= InitialSeed >> (7 + i);
-        InitialSeed ^= InitialSeed << 23;
-        InitialSeed ^= InitialSeed >> (0x29 ^ i);
-        InitialSeed = (InitialSeed * 0x11C19226CEB4769AULL) + 0x1105404122082911ULL;
-        InitialSeed ^= InitialSeed << 19;
-        InitialSeed ^= InitialSeed >> 13;
-        u32_random_state RandomState = { InitialSeed };
-        ThreadContexts[i].RandomState = RandomState;
-    }
-    WorkQueue.Create(&ThreadData, RenderTile, ThreadCount);
+    return R0 + (1.0f - R0) * R1;
 }
 
-static inline constexpr u32 ColorFromV4(const v4 &Value) {
-    u8 r = Saturate(Value.x) * 255.0f;
-    u8 g = Saturate(Value.y) * 255.0f;
-    u8 b = Saturate(Value.z) * 255.0f;
-    u8 a = 255;
-    return (r) | (g << 8) | (b << 16) | (a << 24);
+static inline v4& GetPixelV4(const image &Image, u32 X, u32 Y) {
+    v4 *ImageData = (v4 *)Image.Data;
+    return ImageData[Y * Image.Width + X];
 }
-
 static inline u32& GetPixel(const image &Image, u32 X, u32 Y) {
     u32 *ImageData = (u32 *)Image.Data;
 #if defined(PLATFORM_WASM)
@@ -193,10 +164,6 @@ static inline u32& GetPixel(const image &Image, u32 X, u32 Y) {
 #endif
 }
 
-static inline v4& GetPixelV4(const image &Image, u32 X, u32 Y) {
-    v4 *ImageData = (v4 *)Image.Data;
-    return ImageData[Y * Image.Width + X];
-}
 
 static f32 LinearToSRGB(f32 L) {
 	f32 Result; 
@@ -226,85 +193,37 @@ static v4 LinearToSRGB(v4 L) {
     return Result;
 }
 
-
-static u32 PreviousRayCount = 0;
-static image PreviousImage = {};
-
-static f32 Reflectance(f32 CosTheta, f32 RefractionIndex) {
-    f32 R0 = (1.0f - RefractionIndex) / (1.0f + RefractionIndex);
-    R0 *= R0;
-
-    f32 R1 = 1.0f - CosTheta;
-    R1 = R1 * R1 * R1 * R1 * R1;
-
-    return R0 + (1.0f - R0) * R1;
+static inline constexpr u32 ColorFromV4(const v4 &Value) {
+    u8 r = Saturate(Value.x) * 255.0f;
+    u8 g = Saturate(Value.y) * 255.0f;
+    u8 b = Saturate(Value.z) * 255.0f;
+    u8 a = 255;
+    return (r) | (g << 8) | (b << 16) | (a << 24);
 }
 
-void OnRender(const image &Image) {
+static void RenderTile(work_queue_context *WorkQueueContext) {
 
-    v3 Movement = 0.0f;
-    {
-        constexpr f32 MovementSpeed = 0.5f * WorldScale;
-        if (IsDown(key::W) || IsDown(key::ArrowUp)) {
-            Movement.z -= MovementSpeed;
-        }
-        if (IsDown(key::S) || IsDown(key::ArrowDown)) {
-            Movement.z += MovementSpeed;
-        }
-        if (IsDown(key::D) || IsDown(key::ArrowRight)) {
-            Movement.x += MovementSpeed;
-        }
-        if (IsDown(key::A) || IsDown(key::ArrowLeft)) {
-            Movement.x -= MovementSpeed;
-        }
-        if (IsDown(key::Space)) {
-            Movement.y += MovementSpeed;
-        }
+    u32_random_state RandomState = ThreadContexts[WorkQueueContext->ThreadIndex].RandomState;
 
-        bool FlyDown = IsDown(key::C);
-#ifndef PLATFORM_WASM
-        // Ctrl+W will close the browser window
-        FlyDown |= IsDown(key::LeftControl);
-#endif
-        if (FlyDown) {
-            Movement.y -= MovementSpeed;
-        }
+    const image &Image = CameraInfo.Image; 
+    const image &PreviousImage = CameraInfo.PreviousImage; 
+    const v3 &FilmCenter = CameraInfo.FilmCenter;
+    const v3 &FilmW = CameraInfo.FilmW;
+    const v3 &FilmH = CameraInfo.FilmH;
+    const v3 &CameraX = CameraInfo.CameraX;
+    const v3 &CameraY = CameraInfo.CameraY;
+    const v3 &CameraZ = CameraInfo.CameraZ;
 
-        if (IsDown(key::LeftShift)) {
-            Movement *= 4.0f;
-        }
+    u32 Tile = WorkQueueContext->WorkEntry;
+    u32 TileX = Tile % CameraInfo.TilesX;
+    u32 TileY = Tile / CameraInfo.TilesX;
+    u32 TileTop = TileY * TileSize;
+    u32 TileLeft = TileX * TileSize;
+    u32 TileBottom = TileTop + Min(TileSize, Image.Height - TileTop);
+    u32 TileRight = TileLeft + Min(TileSize, Image.Width - TileLeft);
 
-        CameraPosition += Movement;
-    }
-
-    if (Image.Width != PreviousImage.Width || Image.Height != PreviousImage.Height || v3::Length(Movement) > 0.0f || IsDown(key::R)) {
-        PreviousRayCount = 0;
-        RenderData.Reset();
-        PreviousImage.Width = Image.Width;
-        PreviousImage.Height = Image.Height;
-        PreviousImage.Data = (v4 *)RenderData.Push(Image.Width * Image.Height * sizeof(v4));
-    }
-
-    f64 StartTime = QueryTimestampInMilliseconds();
-
-    v3 CameraZ = v3(0.0f, 0.0f, 1.0f);
-    v3 CameraX = v3::Normalize(v3::Cross(v3(0.0f, 1.0f, 0.0f), CameraZ));
-    v3 CameraY = v3::Normalize(v3::Cross(CameraZ, CameraX));
-    v3 FilmCenter = CameraPosition - CameraZ;
-
-    f32 FilmW = 1.0f;
-    f32 FilmH = 1.0f;
-    if (Image.Width > Image.Height) {
-        FilmH = (f32)Image.Height / (f32)Image.Width;
-    } else {
-        FilmW = (f32)Image.Width / (f32)Image.Height;
-    }
-
-    WorkQueue.Start(8);
-
-#if 1
-    for (u32 y = 0; y < Image.Height; ++y) {
-        for (u32 x = 0; x < Image.Width; ++x) {
+    for (u32 y = TileTop; y < TileBottom; ++y) {
+        for (u32 x = TileLeft; x < TileRight; ++x) {
 
             v3 Attenuation = 1.0f;
             v3 OutputColor = 0.0f;
@@ -377,12 +296,11 @@ void OnRender(const image &Image) {
                 v3 PureBounce = RayDirection - 2.0f * v3::Dot(RayDirection, Normal) * Normal;
 
                 if (Material.IndexOfRefraction == 0.0f) {
-                    v3 RandomV3 = v3::Normalize(v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat()));
+                    v3 RandomV3 = v3::NormalizeFast(v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat()));
                     v3 RandomBounce = Normal + RandomV3;
                     RayDirection = (1.0 - Specular) * RandomBounce + (Specular * PureBounce);
                     RayDirection = v3::Normalize(RayDirection);
                 } else {
-
                     bool RayOriginInSphere = InsideSphere[Index] != 0.0f;
                     f32 RefractionIndex = (RayOriginInSphere) ? Material.IndexOfRefraction : 1.0f / Material.IndexOfRefraction;
                     if (RayOriginInSphere) {
@@ -417,9 +335,132 @@ void OnRender(const image &Image) {
         }
     }
 
-    PreviousRayCount += 1;
 
+    return;
+}
+
+static memory_arena RenderData;
+static memory_arena ThreadData;
+static work_queue WorkQueue;
+
+void OnInit(init_params *Params) {
+    constexpr string8 WindowTitle = u8"Raytracing In One Weekend";
+    Params->WindowTitle = WindowTitle;
+
+    Params->WindowWidth = 1280;
+    Params->WindowHeight = 720;
+
+    InitScalarSpheres(ScalarSpheres);
+    ConvertScalarSpheresToSIMDSpheres(ScalarSpheres, array_len(ScalarSpheres), Spheres);
+
+    RenderData = AllocateArenaFromOS(MB(256));
+    ThreadData = AllocateArenaFromOS(KB(256));
+
+    u32 ThreadCount = GetProcessorThreadCount() - 1;
+    ThreadContexts = (thread_context *)ThreadData.Push(sizeof(thread_context) * (ThreadCount + 1));
+    for (u32 i = 0; i < ThreadCount + 1; ++i) {
+        u64 InitialSeed = 0x420247153476526ULL * (u64)i;
+        InitialSeed += 0x8442885C91A5C8DULL;
+        InitialSeed ^= InitialSeed >> (7 + i);
+        InitialSeed ^= InitialSeed << 23;
+        InitialSeed ^= InitialSeed >> (0x29 ^ i);
+        InitialSeed = (InitialSeed * 0x11C19226CEB4769AULL) + 0x1105404122082911ULL;
+        InitialSeed ^= InitialSeed << 19;
+        InitialSeed ^= InitialSeed >> 13;
+        u32_random_state RandomState = { InitialSeed };
+        ThreadContexts[i].RandomState = RandomState;
+        // ThreadContexts[i].CameraInfo = &CameraInfo;
+    }
+    WorkQueue.Create(&ThreadData, RenderTile, ThreadCount);
+}
+
+
+static image PreviousImage = {};
+
+void OnRender(const image &Image) {
+
+    v3 Movement = 0.0f;
+    {
+        constexpr f32 MovementSpeed = 0.5f * WorldScale;
+        if (IsDown(key::W) || IsDown(key::ArrowUp)) {
+            Movement.z -= MovementSpeed;
+        }
+        if (IsDown(key::S) || IsDown(key::ArrowDown)) {
+            Movement.z += MovementSpeed;
+        }
+        if (IsDown(key::D) || IsDown(key::ArrowRight)) {
+            Movement.x += MovementSpeed;
+        }
+        if (IsDown(key::A) || IsDown(key::ArrowLeft)) {
+            Movement.x -= MovementSpeed;
+        }
+        if (IsDown(key::Space)) {
+            Movement.y += MovementSpeed;
+        }
+
+        bool FlyDown = IsDown(key::C);
+#ifndef PLATFORM_WASM
+        // Ctrl+W will close the browser window
+        FlyDown |= IsDown(key::LeftControl);
+#endif
+        if (FlyDown) {
+            Movement.y -= MovementSpeed;
+        }
+
+        if (IsDown(key::LeftShift)) {
+            Movement *= 4.0f;
+        }
+
+        CameraPosition += Movement;
+    }
+
+    if (Image.Width != PreviousImage.Width || Image.Height != PreviousImage.Height || v3::Length(Movement) > 0.0f || IsDown(key::R)) {
+        PreviousRayCount = 0;
+        RenderData.Reset();
+        PreviousImage.Width = Image.Width;
+        PreviousImage.Height = Image.Height;
+        PreviousImage.Data = (v4 *)RenderData.Push(Image.Width * Image.Height * sizeof(v4));
+    }
+
+    f64 StartTime = QueryTimestampInMilliseconds();
+
+    v3 CameraZ = v3(0.0f, 0.0f, 1.0f);
+    v3 CameraX = v3::Normalize(v3::Cross(v3(0.0f, 1.0f, 0.0f), CameraZ));
+    v3 CameraY = v3::Normalize(v3::Cross(CameraZ, CameraX));
+    v3 FilmCenter = CameraPosition - CameraZ;
+
+    f32 FilmW = 1.0f;
+    f32 FilmH = 1.0f;
+    if (Image.Width > Image.Height) {
+        FilmH = (f32)Image.Height / (f32)Image.Width;
+    } else {
+        FilmW = (f32)Image.Width / (f32)Image.Height;
+    }
+
+    u32 TilesX = Image.Width / TileSize;
+    u32 TilesY = Image.Height / TileSize;
+    if (Image.Width & (TileSize - 1)) TilesX += 1;
+    if (Image.Height & (TileSize - 1)) TilesY += 1;
+    u32 TileCount = TilesX * TilesY;
+
+    CameraInfo.CameraX = CameraX;
+    CameraInfo.CameraY = CameraY;
+    CameraInfo.CameraZ = CameraZ;
+    CameraInfo.FilmCenter = FilmCenter;
+    CameraInfo.FilmW = FilmW;
+    CameraInfo.FilmH = FilmH;
+    CameraInfo.Image = Image;
+    CameraInfo.PreviousImage = PreviousImage;
+    CameraInfo.CameraPosition = CameraPosition;
+    CameraInfo.TilesX = TilesX;
+
+    u32 WorkItemCount = TilesX * TilesY;
+    WorkQueue.Start(WorkItemCount);
+    
     WorkQueue.Wait();
+
+    PreviousRayCount += 1;
+#if 1
 #else
         for (u32 y = 0; y < Image.Height; ++y) {
             for (u32 x = 0; x < Image.Width; ++x) {

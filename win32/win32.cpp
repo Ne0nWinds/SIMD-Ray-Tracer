@@ -212,7 +212,6 @@ struct win32_work_queue_data {
 struct thread_function_data {
     win32_work_queue_data *OSData;
     u32 ThreadIndex;
-    void *CustomData;
 };
 
 static u32 ThreadFunction(thread_function_data *Context) {
@@ -226,12 +225,11 @@ static u32 ThreadFunction(thread_function_data *Context) {
             u32 ThreadIndex = Context->ThreadIndex;
             work_queue_context ThreadCallbackContext = {
                 .WorkEntry = (u32)WorkEntry,
-                .ThreadIndex = (u32)ThreadIndex,
-                .Data = Context->CustomData
+                .ThreadIndex = Context->ThreadIndex
             };
 
             Data->ThreadCallback(&ThreadCallbackContext);
-            Data->WorkCompleted += 1;
+            InterlockedIncrement(&Data->WorkCompleted);
         } else {
             WaitForSingleObject(Data->Semaphore, INFINITE);
         }
@@ -241,29 +239,24 @@ static u32 ThreadFunction(thread_function_data *Context) {
 void work_queue::Create(memory_arena *Arena, thread_callback ThreadCallback, u32 Count) {
     win32_work_queue_data *WorkQueueData = 0;
     WorkQueueData = (win32_work_queue_data *)Arena->Push(sizeof(win32_work_queue_data));
-    WorkQueueData->Semaphore = CreateSemaphore(NULL, Count, Count, 0);
+
+    u32 ThreadCount = Count - 1;
+    WorkQueueData->Semaphore = CreateSemaphore(NULL, ThreadCount, ThreadCount, 0);
 
     WorkQueueData->ThreadHandles = (HANDLE *)Arena->Push(sizeof(HANDLE) * Count);
     WorkQueueData->ThreadData = (thread_function_data *)Arena->Push(sizeof(thread_function_data) * Count);
-    for (u32 i = 0; i < Count; ++i) {
+    for (u32 i = 0; i < ThreadCount; ++i) {
         thread_function_data *Data = WorkQueueData->ThreadData + i;
         Data->OSData = WorkQueueData;
-        Data->ThreadIndex = i;
+        Data->ThreadIndex = i + 1;
         WorkQueueData->ThreadHandles[i] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&ThreadFunction, Data, 0, 0);
     }
 
     WorkQueueData->ThreadCallback = ThreadCallback;
     WorkQueueData->WorkIndex = 0;
     WorkQueueData->WorkCompleted = 0;
-    WorkQueueData->ThreadCount = Count;
+    WorkQueueData->ThreadCount = ThreadCount;
     this->OSData = WorkQueueData;
-}
-
-u32 work_queue::GetNextWorkEntry() {
-    win32_work_queue_data *Data = (win32_work_queue_data *)this->OSData;
-    LONG WorkEntry = InterlockedIncrement(&Data->WorkIndex);
-    WorkEntry -= 1;
-    return (u32)WorkEntry;
 }
 
 #define MemoryFenceLoad() _mm_lfence()
@@ -273,13 +266,33 @@ void work_queue::Start(u32 WorkItemCount) {
     win32_work_queue_data *WorkQueueData = (win32_work_queue_data *)this->OSData;
     WorkQueueData->WorkItemCount = WorkItemCount;
     WorkQueueData->WorkIndex = 0;
+    WorkQueueData->WorkCompleted = 0;
     MemoryFenceStore();
     LONG PreviousCount = -1;
     BOOL Success = ReleaseSemaphore(WorkQueueData->Semaphore, WorkQueueData->ThreadCount, &PreviousCount);
-    Assert(Success);
+    if (!Success) {
+        DWORD LastError = GetLastError();
+        Break();
+    }
 }
+
 void work_queue::Wait() {
     win32_work_queue_data *WorkQueueData = (win32_work_queue_data *)this->OSData;
+
+#if 1
+    u32 WorkItemCount = WorkQueueData->WorkItemCount;
+    u32 WorkEntry = InterlockedIncrement(&WorkQueueData->WorkIndex) - 1;
+    while (WorkEntry < WorkItemCount) {
+        work_queue_context Context = {
+            .WorkEntry = WorkEntry,
+            .ThreadIndex = 0
+        };
+        WorkQueueData->ThreadCallback(&Context);
+        InterlockedIncrement(&WorkQueueData->WorkCompleted);
+        WorkEntry = InterlockedIncrement(&WorkQueueData->WorkIndex) - 1;
+    }
+#endif
+
     while (WorkQueueData->WorkCompleted < WorkQueueData->WorkItemCount);
 }
 

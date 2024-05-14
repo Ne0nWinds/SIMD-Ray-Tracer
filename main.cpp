@@ -203,7 +203,7 @@ static inline constexpr u32 ColorFromV4(const v4 &Value) {
 
 static void RenderTile(work_queue_context *WorkQueueContext) {
 
-    u32_random_state RandomState = ThreadContexts[WorkQueueContext->ThreadIndex].RandomState;
+    u32_random_state &RandomState = ThreadContexts[WorkQueueContext->ThreadIndex].RandomState;
 
     const image &Image = CameraInfo.Image; 
     const image &PreviousImage = CameraInfo.PreviousImage; 

@@ -1,5 +1,7 @@
 #include "..\base.h"
 
+#include <stdatomic.h>
+
 #define WASM_EXPORT(name) __attribute__((export_name(#name))) name
 #define WASM_IMPORT(name) __attribute__((import_name(#name))) name
 
@@ -70,6 +72,54 @@ void WASM_IMPORT(__break)();
 
 void __WasmBreak() {
     __break();
+}
+
+u32 WASM_IMPORT(__getProcessorThreadCount)();
+u32 GetProcessorThreadCount() {
+    return __getProcessorThreadCount();
+}
+
+struct wasm_work_queue_data {
+    atomic_uint_fast32_t WorkIndex;
+    atomic_uint_fast32_t WorkCompleted;
+    u32 WorkItemCount;
+
+    thread_callback ThreadCallback;
+    u32 ThreadCount;
+};
+
+void work_queue::Create(memory_arena *Arena, thread_callback ThreadCallback, u32 Count) {
+    wasm_work_queue_data *WorkQueueData = (wasm_work_queue_data *)Arena->Push(sizeof(wasm_work_queue_data));
+
+    __builtin_memset(WorkQueueData, 0, sizeof(wasm_work_queue_data));
+    u32 ThreadCount = 1;
+    WorkQueueData->ThreadCount = ThreadCount;
+    WorkQueueData->ThreadCallback = ThreadCallback;
+
+    this->OSData = WorkQueueData;
+}
+
+void work_queue::Start(u32 WorkItemCount) {
+    wasm_work_queue_data *WorkQueueData = (wasm_work_queue_data *)this->OSData;
+    WorkQueueData->WorkItemCount = WorkItemCount;
+    WorkQueueData->WorkIndex = 0;
+    WorkQueueData->WorkCompleted = 0;
+}
+
+void work_queue::Wait() {
+    wasm_work_queue_data *WorkQueueData = (wasm_work_queue_data *)this->OSData;
+
+    u32 WorkItemCount = WorkQueueData->WorkItemCount;
+    u32 WorkEntry = atomic_fetch_add(&WorkQueueData->WorkIndex, 1);
+    while (WorkEntry < WorkItemCount) {
+        work_queue_context Context = {
+            .WorkEntry = WorkEntry,
+            .ThreadIndex = 0
+        };
+        WorkQueueData->ThreadCallback(&Context);
+        ++WorkQueueData->WorkCompleted;
+        WorkEntry = atomic_fetch_add(&WorkQueueData->WorkIndex, 1);
+    }
 }
 
 static void InitWASMEnvironmentProperties() {

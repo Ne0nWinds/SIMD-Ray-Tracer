@@ -34,7 +34,8 @@ window.onresize = setCanvasWidth;
 WebAssembly.instantiateStreaming(fetch("./main.wasm"), {
         "env": {
             "__now": window.performance.now.bind(window.performance),
-            "__break": () => { debugger; }
+            "__break": () => { debugger; },
+            "__getProcessorThreadCount": () => navigator.hardwareConcurrency
         }
     })
     .then((module) => {
@@ -371,7 +372,7 @@ const convertJSCodeToWasmCode = (code) => {
 
 window.onkeydown = (e) => {
     if (document.hasFocus()) {
-        e.preventDefault();
+        if (e.code != "KeyI") e.preventDefault();
         let k = convertJSCodeToWasmCode(e.code);
         instance.exports.updateKeyState(k, 1);
     }

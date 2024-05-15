@@ -25,10 +25,9 @@ struct material {
     f32 IndexOfRefraction;
 };
 
-static scalar_sphere ScalarSpheres[128];
+static scalar_sphere ScalarSpheres[8];
 static sphere_group Spheres[array_len(ScalarSpheres) / SIMD_WIDTH];
 static material Materials[array_len(ScalarSpheres) + 1];
-static u32_random_state RandomState = { 0x4d595df4d0f33173ULL };
 
 static constexpr f32 WorldScale = 1.0f / 16.0f;
 constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v3 &Color, f32 Specular, f32 IndexOfRefraction, const v3 &Emissive, scalar_sphere *Sphere) {
@@ -212,7 +211,7 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
     const v3 &FilmH = CameraInfo.FilmH;
     const v3 &CameraX = CameraInfo.CameraX;
     const v3 &CameraY = CameraInfo.CameraY;
-    const v3 &CameraZ = CameraInfo.CameraZ;
+    // const v3 &CameraZ = CameraInfo.CameraZ;
 
     u32 Tile = WorkQueueContext->WorkEntry;
     u32 TileX = Tile % CameraInfo.TilesX;
@@ -295,17 +294,18 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
 
                 v3 PureBounce = RayDirection - 2.0f * v3::Dot(RayDirection, Normal) * Normal;
 
+                bool RayOriginInSphere = InsideSphere[Index] != 0.0f;
+                if (RayOriginInSphere) {
+                    Normal = -Normal;
+                }
+
                 if (Material.IndexOfRefraction == 0.0f) {
                     v3 RandomV3 = v3::NormalizeFast(v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat()));
                     v3 RandomBounce = Normal + RandomV3;
                     RayDirection = (1.0 - Specular) * RandomBounce + (Specular * PureBounce);
                     RayDirection = v3::Normalize(RayDirection);
                 } else {
-                    bool RayOriginInSphere = InsideSphere[Index] != 0.0f;
                     f32 RefractionIndex = (RayOriginInSphere) ? Material.IndexOfRefraction : 1.0f / Material.IndexOfRefraction;
-                    if (RayOriginInSphere) {
-                        Normal = -Normal;
-                    }
 
                     f32 CosTheta = Min(v3::Dot(-RayDirection, Normal), 1.0f);
                     f32 SinTheta = SquareRoot(1.0 - CosTheta * CosTheta);
@@ -381,7 +381,7 @@ void OnRender(const image &Image) {
 
     v3 Movement = 0.0f;
     {
-        constexpr f32 MovementSpeed = 0.5f * WorldScale;
+        constexpr f32 MovementSpeed = 0.125f * WorldScale;
         if (IsDown(key::W) || IsDown(key::ArrowUp)) {
             Movement.z -= MovementSpeed;
         }
@@ -441,7 +441,6 @@ void OnRender(const image &Image) {
     u32 TilesY = Image.Height / TileSize;
     if (Image.Width & (TileSize - 1)) TilesX += 1;
     if (Image.Height & (TileSize - 1)) TilesY += 1;
-    u32 TileCount = TilesX * TilesY;
 
     CameraInfo.CameraX = CameraX;
     CameraInfo.CameraY = CameraY;

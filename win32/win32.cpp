@@ -189,6 +189,11 @@ static void InitOSProperties() {
         Assert(Success);
         (void)Success;
     }
+
+    // Set denormalized floats to zero
+#if defined(CPU_X64)
+    _mm_setcsr(_mm_getcsr() | (_MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON));
+#endif
 }
 
 u32 GetProcessorThreadCount() {
@@ -222,7 +227,6 @@ static u32 ThreadFunction(thread_function_data *Context) {
         bool Continue = WorkEntry < Data->WorkItemCount;
 
         if (Continue) {
-            u32 ThreadIndex = Context->ThreadIndex;
             work_queue_context ThreadCallbackContext = {
                 .WorkEntry = (u32)WorkEntry,
                 .ThreadIndex = Context->ThreadIndex
@@ -268,12 +272,7 @@ void work_queue::Start(u32 WorkItemCount) {
     WorkQueueData->WorkIndex = 0;
     WorkQueueData->WorkCompleted = 0;
     MemoryFenceStore();
-    LONG PreviousCount = -1;
-    BOOL Success = ReleaseSemaphore(WorkQueueData->Semaphore, WorkQueueData->ThreadCount, &PreviousCount);
-    if (!Success) {
-        DWORD LastError = GetLastError();
-        Break();
-    }
+    ReleaseSemaphore(WorkQueueData->Semaphore, WorkQueueData->ThreadCount, NULL);
 }
 
 void work_queue::Wait() {

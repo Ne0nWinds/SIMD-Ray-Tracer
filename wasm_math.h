@@ -41,6 +41,10 @@ inline f32x4::f32x4(const u32x4 &V) {
 static inline f32 SquareRoot(f32 Value) {
     return __builtin_sqrt(Value);
 }
+MATHCALL f32 Abs(f32 Value) {
+    if (Value < 0.0f) return -Value;
+    return Value;
+}
 static inline f32 Max(f32 A, f32 B) {
     return __builtin_wasm_max_f32(A, B);
 }
@@ -150,6 +154,10 @@ MATHCALL v3 operator*(const v3 &A, const v3 &B) {
 }
 MATHCALL v3 operator/(const v3 &A, const v3 &B) {
     v128 Result = wasm_f32x4_div(v128(A), v128(B));
+    return (v3)Result;
+}
+MATHCALL v3 operator-(const v3 &A) {
+    v128 Result = wasm_f32x4_neg(v128(A));
     return (v3)Result;
 }
 

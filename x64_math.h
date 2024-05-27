@@ -3,26 +3,44 @@
 #include <immintrin.h>
 
 union xmm {
-    f32 Float;
-    v2 Vector2;
-    v3 Vector3;
-    v4 Vector4;
-    f32x4 Float4;
     __m128 Register;
+    __m128i IntRegister;
 
     inline xmm() { Register = _mm_setzero_ps(); }
-    inline xmm(f32 Value) : Float(Value) { };
-    inline xmm(v2 Value) : Vector2(Value) { };
-    inline xmm(v3 Value) : Vector3(Value) { };
-    inline xmm(const v4 &Value) : Vector4(Value) { };
-    inline xmm(const f32x4 &Value) : Float4(Value) { };
+    inline xmm(f32 Value) { Register = _mm_set_ss(Value); };
+    inline xmm(const v2 &Value) { Register = _mm_load_sd((f64 *)&Value); };
+    inline xmm(const v3 &Value) { Register = _mm_loadu_ps((f32 *)&Value); };
+    inline xmm(const v4 &Value) { Register = _mm_loadu_ps((f32 *)&Value); };
+    inline xmm(const f32x4 &Value) { Register = _mm_loadu_ps(Value.Value); };
+    inline xmm(const u32x4 &Value) { IntRegister = _mm_load_si128((const __m128i *)&Value); };
     inline xmm(const __m128 &XMM) : Register(XMM) { };
 
-    explicit operator f32() const { return Float; }
-    explicit operator v2() const { return Vector2; }
-    explicit operator v3() const { return Vector3; }
-    explicit operator v4() const { return Vector4; }
-    explicit operator f32x4() const { return Float4; }
+    explicit operator f32() const { return _mm_cvtss_f32(Register); }
+    explicit operator v2() const { 
+        v2 Result;
+        _mm_store_sd((f64 *)&Result, Register);
+        return Result;
+    }
+    explicit operator v3() const {
+        v3 Result;
+        _mm_store_ps((f32 *)&Result, Register);
+        return Result;
+    }
+    explicit operator v4() const {
+        v4 Result;
+        _mm_store_ps((f32 *)&Result, Register);
+        return Result;
+    }
+    explicit operator f32x4() const {
+        f32x4 Result;
+        _mm_store_ps(Result.Value, Register);
+        return Result;
+    }
+    explicit operator u32x4() const {
+        u32x4 Result;
+        _mm_store_si128((__m128i *)Result.Value, IntRegister);
+        return Result;
+    }
     operator __m128() const { return Register; }
 
     static inline xmm CreateMask(bool Value) {
@@ -34,6 +52,18 @@ union xmm {
     }
 };
 
+MATHCALL u32 Min(u32 A, u32 B) {
+	u32 DOZ = (A - B) & -(A >= B);
+	u32 Result = A - DOZ;
+	return Result;
+}
+
+MATHCALL f32 Abs(f32 Value) {
+    constexpr u32 SignBitU32 = ~F32SignBit;
+    xmm SignBit = _mm_set1_ps(*(f32 *)&SignBitU32);
+    xmm Result = _mm_and_ps(xmm(Value), SignBit);
+    return (f32)Result;
+}
 MATHCALL f32 SquareRoot(f32 Value) {
     xmm Result = _mm_sqrt_ss(xmm(Value));
     return (f32)Result;
@@ -51,7 +81,7 @@ MATHCALL f32 Min(f32 A, f32 B) {
     return (f32)Result;
 }
 MATHCALL f32 Negate(f32 Value) {
-    xmm SignBit = xmm(F32SignBit);
+    xmm SignBit = xmm(-0.0f);
     xmm Result = _mm_xor_ps(SignBit, xmm(Value));
     return (f32)Result;
 }
@@ -77,7 +107,7 @@ inline v2::v2(f32 X) {
     xmm xmm0 = _mm_set1_ps(X);
     *this = (v2)xmm0;
 }
-inline v3::v3(f32 X) {
+inline v3::v3(const f32 &X) {
     xmm xmm0 = _mm_set1_ps(X);
     *this = (v3)xmm0;
 }
@@ -90,7 +120,7 @@ inline v2::v2(f32 X, f32 Y) {
     xmm xmm0 = _mm_set_ps(0.0f, 0.0f, Y, X);
     *this = (v2)xmm0;
 }
-inline v3::v3(f32 X, f32 Y, f32 Z) {
+inline v3::v3(const f32 &X, const f32 &Y, const f32 &Z) {
     xmm xmm0 = _mm_set_ps(0.0f, Z, Y, X);
     *this = (v3)xmm0;
 }
@@ -186,6 +216,10 @@ MATHCALL v2 operator/(const v2 &A, const v2 &B) {
     xmm Result = _mm_div_ps(xmm(A), xmm(B));
     return (v2)Result;
 }
+MATHCALL v3 operator-(const v3 &A) {
+    xmm Result = _mm_xor_ps(xmm(A), xmm(_mm_set1_ps(-0.0f)));
+    return (v3)Result;
+}
 
 inline f32 v3::Dot(const v3 &A, const v3 &B) {
     v3 Mul = A * B;
@@ -204,8 +238,19 @@ inline v3 v3::Normalize(const v3 &Value) {
     xmm Mask = xmm::CreateMask(LengthGreaterThanZero);
 
     f32 Length = SquareRoot(LengthSquared);
-    // v3 Result = Value * Reciprocal(Length);
     v3 Result = Value / Length;
+
+    xmm MaskedResult = _mm_and_ps(xmm(Result), Mask);
+    return (v3)MaskedResult;
+}
+inline v3 v3::NormalizeFast(const v3 &Value) {
+    f32 LengthSquared = v3::LengthSquared(Value);
+
+    bool LengthGreaterThanZero = LengthSquared > F32Epsilon;
+    xmm Mask = xmm::CreateMask(LengthGreaterThanZero);
+
+    f32 InvLength = InverseSquareRoot(LengthSquared);
+    v3 Result = Value * InvLength;
 
     xmm MaskedResult = _mm_and_ps(xmm(Result), Mask);
     return (v3)MaskedResult;
@@ -251,15 +296,15 @@ MATHCALL v4 operator/(const v4 &A, const v4 &B) {
     return (v4)Result;
 }
 
-inline f32x v3x::Dot(const v3x &A, const v3x &B) {
-    v3x C = A * B;
-    f32x Result = C.x + C.y + C.z;
+inline f32x4 v3x4::Dot(const v3x4 &A, const v3x4 &B) {
+    v3x4 C = A * B;
+    f32x4 Result = C.x + C.y + C.z;
     return Result;
 }
 
-inline f32x v3x::LengthSquared(const v3x &A) {
-    v3x C = A * A;
-    f32x Result = C.x + C.y + C.z;
+inline f32x4 v3x4::LengthSquared(const v3x4 &A) {
+    v3x4 C = A * A;
+    f32x4 Result = C.x + C.y + C.z;
     return Result;
 }
 
@@ -275,7 +320,18 @@ inline v3x v3x::Normalize(const v3x &Value) {
     f32x LengthGreaterThanZeroMask = LengthSquared > F32Epsilon;
 
     f32x Length = f32x::SquareRoot(LengthSquared);
-    v3x Result = Value * f32x::Reciprocal(Length);
+    v3x Result = Value / Length;
+
+    v3x MaskedResult = Result & LengthGreaterThanZeroMask;
+    return MaskedResult;
+}
+inline v3x v3x::NormalizeFast(const v3x &Value) {
+    f32x LengthSquared = v3x::LengthSquared(Value);
+
+    f32x LengthGreaterThanZeroMask = LengthSquared > F32Epsilon;
+
+    f32x InverseLength = f32x::InverseSquareRoot(LengthSquared);
+    v3x Result = Value * InverseLength;
 
     v3x MaskedResult = Result & LengthGreaterThanZeroMask;
     return MaskedResult;
@@ -288,16 +344,28 @@ inline void v3x::ConditionalMove(v3x *A, const v3x &B, const f32x &MoveMask) {
 
 #if SIMD_WIDTH >= 8
 union ymm {
-    f32x8 Vector8;
-    u32x8 U32Vector8;
     __m256 Register;
+    __m256i IntRegister;
+
     inline ymm() { Register = _mm256_setzero_ps(); };
-    inline ymm(const f32x8 &Value) : Vector8(Value) { };
-    inline ymm(const u32x8 &Value) : U32Vector8(Value) { };
+    inline ymm(const f32x8 &Value) {
+        Register = _mm256_load_ps(Value.Value);
+    };
+    inline ymm(const u32x8 &Value) {
+        IntRegister = _mm256_load_si256((__m256i *)Value.Value);
+    };
     inline ymm(const __m256 &YMM) : Register(YMM) { };
 
-    explicit operator u32x8() const { return U32Vector8; }
-    explicit operator f32x8() const { return Vector8; }
+    explicit operator u32x8() const {
+        u32x8 Result;
+        _mm256_store_si256((__m256i *)Result.Value, IntRegister);
+        return Result;
+    }
+    explicit operator f32x8() const {
+        f32x8 Result;
+        _mm256_store_ps(Result.Value, Register);
+        return Result;
+    }
     operator __m256() const { return Register; }
 };
 
@@ -338,8 +406,24 @@ MATHCALL f32x8 operator~(const f32x8 &A) {
     ymm Result = _mm256_xor_ps(ymm(A), Ones);
     return (f32x8)Result;
 }
+inline f32x8 v3x8::Dot(const v3x8 &A, const v3x8 &B) {
+    ymm XMul = _mm256_mul_ps(ymm(A.x), ymm(B.x));
+    ymm YMulPlusXMul = _mm256_fmadd_ps(ymm(A.y), ymm(B.y), ymm(XMul));
+    ymm Result = _mm256_fmadd_ps(ymm(A.z), ymm(B.z), YMulPlusXMul);
+    return (f32x8)Result;
+}
+inline f32x8 v3x8::LengthSquared(const v3x8 &A) {
+    ymm XMul = _mm256_mul_ps(ymm(A.x), ymm(A.x));
+    ymm YMulPlusXMul = _mm256_fmadd_ps(ymm(A.y), ymm(A.y), ymm(XMul));
+    ymm Result = _mm256_fmadd_ps(ymm(A.z), ymm(A.z), YMulPlusXMul);
+    return (f32x8)Result;
+}
 inline f32x8 f32x8::SquareRoot(const f32x8 &A) {
     ymm Result = _mm256_sqrt_ps(ymm(A));
+    return (f32x8)Result;
+}
+inline f32x8 f32x8::InverseSquareRoot(const f32x8 &A) {
+    ymm Result = _mm256_rsqrt_ps(ymm(A));
     return (f32x8)Result;
 }
 inline f32x8 f32x8::Min(const f32x8 &A, const f32x8 &B) {
@@ -462,10 +546,18 @@ MATHCALL u32x8 operator<<(const u32x8 &A, const u32 &&B) {
     ymm Result = _mm256_slli_epi32(ymm(A), B);
     return (u32x8)Result;
 }
+inline void u32x8::ConditionalMove(u32x8 *A, const u32x8 &B, const u32x8 &MoveMask) {
+    ymm BlendedResult = _mm256_blendv_ps(ymm(*A), ymm(B), ymm(MoveMask));
+    *A = (u32x8)BlendedResult;
+}
 #endif
 
 inline f32x4 f32x4::SquareRoot(const f32x4 &A) {
     xmm Result = _mm_sqrt_ps(xmm(A));
+    return (f32x4)Result;
+}
+inline f32x4 f32x4::InverseSquareRoot(const f32x4 &A) {
+    xmm Result = _mm_rsqrt_ps(xmm(A));
     return (f32x4)Result;
 }
 inline f32x4 f32x4::Min(const f32x4 &A, const f32x4 &B) {
@@ -552,8 +644,81 @@ MATHCALL f32x4 operator~(const f32x4 &A) {
 }
 
 MATHCALL bool IsZero(const f32x4 &Value) {
-    xmm Zero = xmm();
-    xmm ComparisonResult = _mm_cmpneq_ps(xmm(Value), Zero);
-    s32 MoveMask = _mm_movemask_ps(ComparisonResult);
+    s32 MoveMask = _mm_movemask_ps(xmm(Value));
     return MoveMask == 0;
+}
+
+MATHCALL u32x4 operator+(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_add_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator-(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_sub_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator*(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_mul_epu32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+
+MATHCALL u32x4 operator==(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_cmpeq_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator!=(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_cmpeq_epi32(xmm(A), xmm(B));
+    return ~(u32x4)Result;
+}
+MATHCALL u32x4 operator>(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_cmpgt_epi32(xmm(A), xmm(B)); // not technically correct
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator<(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_cmplt_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+
+MATHCALL u32x4 operator&(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_and_si128(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator|(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_or_si128(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator^(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_xor_si128(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator~(const u32x4 &A) {
+    xmm Ones = _mm_cmpeq_epi32(xmm(), xmm());
+    xmm Result = _mm_xor_si128(xmm(A), Ones);
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator>>(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_sll_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator<<(const u32x4 &A, const u32x4 &B) {
+    xmm Result = _mm_srl_epi32(xmm(A), xmm(B));
+    return (u32x4)Result;
+}
+
+MATHCALL u32x4 operator>>(const u32x4 &A, const u32 &&B) {
+    xmm Result = _mm_slli_epi32(xmm(A), B);
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator<<(const u32x4 &A, const u32 &&B) {
+    xmm Result = _mm_srli_epi32(xmm(A), B);
+    return (u32x4)Result;
+}
+
+inline void u32x4::ConditionalMove(u32x4 *A, const u32x4 &B, const u32x4 &MoveMask) {
+    u32x4 BlendedResult = (*A & ~MoveMask) | (B & MoveMask);
+    *A = (u32x4)BlendedResult;
+}
+
+inline f32x4::f32x4(const u32x4 &V) {
+    xmm Result = _mm_cvtepi32_ps(xmm(V));
+    *this = (f32x4)Result;
 }

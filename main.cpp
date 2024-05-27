@@ -10,14 +10,180 @@ struct scalar_sphere {
     f32 Specular;
 };
 struct sphere_group {
-    v3x Positions;
-    f32x Radii;
-    v3x Color;
-    f32x Specular;
+    v3x4 Positions;
+    f32x4 Radii;
+    v3x4 Color;
+    f32x4 Specular;
 };
 static scalar_sphere ScalarSpheres[8];
-static sphere_group Spheres[array_len(ScalarSpheres) / SIMD_WIDTH];
-static u32_random_state RandomState = { 0x4d595df4d0f33173ULL };
+static sphere_group SphereGroups[array_len(ScalarSpheres) / SIMD_WIDTH];
+
+static constexpr inline void InitScalarSpheres(scalar_sphere *ScalarSpheres);
+static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * const Spheres, u32 ScalarLength, sphere_group *SIMDSpheres);
+
+void OnInit(init_params *Params) {
+    constexpr string8 WindowTitle = u8"Raytracing In One Weekend";
+    Params->WindowTitle = WindowTitle;
+    Params->WindowWidth = 640;
+    Params->WindowHeight = 640;
+
+    InitScalarSpheres(ScalarSpheres);
+    ConvertScalarSpheresToSIMDSpheres(ScalarSpheres, array_len(ScalarSpheres), SphereGroups);
+}
+
+static inline constexpr u32 ColorFromV4(const v4 &Value) {
+    u8 r = Saturate(Value.x) * 255.0f;
+    u8 g = Saturate(Value.y) * 255.0f;
+    u8 b = Saturate(Value.z) * 255.0f;
+    u8 a = 255;
+    return (r) | (g << 8) | (b << 16) | (a << 24);
+}
+
+static inline u32& GetPixel(const image &Image, u32 X, u32 Y) {
+    u32 *ImageData = (u32 *)Image.Data;
+#if defined(PLATFORM_WASM)
+    Y = Image.Height - Y - 1;
+    return ImageData[Y * Image.Width + X];
+#else
+    return ImageData[Y * Image.Width + X];
+#endif
+}
+
+void OnRender(const image &Image) {
+
+    v3 Movement = 0.0f;
+    {
+        if (IsDown(key::W) || IsDown(key::ArrowUp)) {
+            Movement.z -= 0.5f;
+        }
+        if (IsDown(key::S) || IsDown(key::ArrowDown)) {
+            Movement.z += 0.5f;
+        }
+        if (IsDown(key::D) || IsDown(key::ArrowRight)) {
+            Movement.x += 0.5f;
+        }
+        if (IsDown(key::A) || IsDown(key::ArrowLeft)) {
+            Movement.x -= 0.5f;
+        }
+        if (IsDown(key::Space)) {
+            Movement.y += 0.5f;
+        }
+
+        bool FlyDown = IsDown(key::C);
+#ifndef PLATFORM_WASM
+        // Ctrl+W will close the browser window
+        FlyDown |= IsDown(key::LeftControl);
+#endif
+        if (FlyDown) {
+            Movement.y -= 0.5f;
+        }
+        CameraPosition += Movement;
+    }
+
+    f64 StartTime = QueryTimestampInMilliseconds();
+
+    v3 CameraZ = v3(0.0f, 0.0f, 1.0f);
+    v3 CameraX = v3(1.0f, 0.0f, 0.0f);
+    v3 CameraY = v3(0.0f, 1.0f, 0.0f);
+    v3 FilmCenter = CameraPosition - CameraZ;
+
+    f32 FilmW = 1.0f;
+    f32 FilmH = 1.0f;
+    if (Image.Width > Image.Height) {
+        FilmH = (f32)Image.Height / (f32)Image.Width;
+    } else {
+        FilmW = (f32)Image.Width / (f32)Image.Height;
+    }
+
+    for (u32 y = 0; y < Image.Height; ++y) {
+        for (u32 x = 0; x < Image.Width; ++x) {
+            f32 FilmX = -1.0f + (x * 2.0f) / (f32)Image.Width;
+            f32 FilmY = -1.0f + (y * 2.0f) / (f32)Image.Height;
+
+            v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
+            v3 RayOrigin = CameraPosition;
+            v3 RayDirection = v3::Normalize(FilmP - RayOrigin);
+
+            v3 DefaultColor = v3(0.0);
+
+#if 1
+            // SIMD version
+            v3x4 Color = v3x4(DefaultColor);
+            f32x4 MinT = F32Max;
+
+            for (const sphere_group &SphereGroup : SphereGroups) {
+                v3x4 SphereCenter = SphereGroup.Positions - RayOrigin;
+                f32x4 T = v3x4::Dot(SphereCenter, RayDirection);
+                v3x4 ProjectedPoint = RayDirection * T;
+
+                f32x4 Radius = SphereGroup.Radii;
+                f32x4 DistanceFromCenter = v3x4::Length(SphereCenter - ProjectedPoint);
+                f32x4 HitMask = DistanceFromCenter < Radius;
+                if (IsZero(HitMask)) continue;
+                
+                f32x4 X = f32x4::SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
+                T = T - X;
+                
+                f32x4 MinMask = (T < MinT) & (T > 0);
+                f32x4 MoveMask = MinMask & HitMask;
+                if (IsZero(MoveMask)) continue;
+
+                v3x4 IntersectionPoint = RayDirection * T;
+                v3x4 Normal = v3x4::Normalize(IntersectionPoint - SphereCenter);
+
+                f32x4::ConditionalMove(&MinT, T, MoveMask);
+                v3x4::ConditionalMove(&Color, (Normal + 1.0f) * 0.5f, MoveMask);
+            }
+
+            u32 Index = f32x4::HorizontalMinIndex(MinT);
+
+            v4 OutputColor;
+            OutputColor.x = Color.x[Index];
+            OutputColor.y = Color.y[Index];
+            OutputColor.z = Color.z[Index];
+            OutputColor.w = 1.0;
+#else
+            // Scalar version
+            v3 Color = DefaultColor;
+            f32 MinT = F32Max;
+
+            for (const scalar_sphere &Sphere : ScalarSpheres) {
+                v3 SphereCenter = Sphere.Position - RayOrigin;
+                f32 T = v3::Dot(SphereCenter, RayDirection);
+                v3 ProjectedPoint = RayDirection * T;
+
+                f32 Radius = Sphere.Radius;
+                f32 DistanceFromCenter = v3::Length(SphereCenter - ProjectedPoint);
+                if (DistanceFromCenter > Radius) continue;
+                
+                f32 X = SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
+                T = T - X;
+                
+                if (T > MinT || T < 0) continue;
+                MinT = T;
+
+                v3 IntersectionPoint = RayDirection * T;
+
+                // Calculate Color Value
+                v3 Normal = v3::Normalize(IntersectionPoint - SphereCenter);
+                Color = (Normal + 1.0f) * 0.5f;
+            }
+
+            v4 OutputColor;
+            OutputColor.x = Color.x;
+            OutputColor.y = Color.y;
+            OutputColor.z = Color.z;
+            OutputColor.w = 1.0;
+#endif
+            u32 &Pixel = GetPixel(Image, x, y);
+            Pixel = ColorFromV4(OutputColor);
+        }
+    }
+
+    f64 EndTime = QueryTimestampInMilliseconds();
+    volatile f64 TimeElapsed = EndTime - StartTime;
+    (void)TimeElapsed;
+}
 
 static constexpr inline void InitScalarSpheres(scalar_sphere *ScalarSpheres) {
     ScalarSpheres[0].Position.x = 0.0f;
@@ -107,283 +273,4 @@ static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * co
             SphereGroup.Specular[j] = Specular;
         }
     }
-}
-
-static memory_arena RenderData;
-
-void OnInit(init_params *Params) {
-    constexpr string8 WindowTitle = u8"Raytracing In One Weekend";
-    Params->WindowTitle = WindowTitle;
-    Params->WindowWidth = 1280;
-    Params->WindowHeight = 720;
-
-    InitScalarSpheres(ScalarSpheres);
-    ConvertScalarSpheresToSIMDSpheres(ScalarSpheres, array_len(ScalarSpheres), Spheres);
-
-    RenderData = AllocateArenaFromOS(MB(256));
-}
-
-static inline constexpr u32 ColorFromV4(const v4 &Value) {
-    u8 r = Saturate(Value.x) * 255.0f;
-    u8 g = Saturate(Value.y) * 255.0f;
-    u8 b = Saturate(Value.z) * 255.0f;
-    u8 a = 255;
-    return (r) | (g << 8) | (b << 16) | (a << 24);
-}
-
-static inline u32& GetPixel(const image &Image, u32 X, u32 Y) {
-    u32 *ImageData = (u32 *)Image.Data;
-#if defined(PLATFORM_WASM)
-    Y = Image.Height - Y - 1;
-    return ImageData[Y * Image.Width + X];
-#else
-    return ImageData[Y * Image.Width + X];
-#endif
-}
-
-static inline v4& GetPixelV4(const image &Image, u32 X, u32 Y) {
-    v4 *ImageData = (v4 *)Image.Data;
-    return ImageData[Y * Image.Width + X];
-}
-
-static f32 LinearToSRGB(f32 L) {
-	f32 Result; 
-
-	L = Saturate(L);
-
-	if (L < 0.0031308f) {
-		Result = L * 12.92f;
-	} else {
-#if 0
-		Result = 1.055f * powf(L, 1.0f / 2.4f) - 0.055f;
-#else
-		// bad but fast code
-		Result = 1.02f * SquareRoot(L);
-#endif
-	}
-
-	return Result;
-}
-
-static v4 LinearToSRGB(v4 L) {
-    v4 Result;
-    Result.x = LinearToSRGB(L.x);
-    Result.y = LinearToSRGB(L.y);
-    Result.z = LinearToSRGB(L.z);
-    Result.w = 1.0f;
-    return Result;
-}
-
-
-static u32 PreviousRayCount = 0;
-static image PreviousImage = {};
-
-void OnRender(const image &Image) {
-
-    v3 Movement = 0.0f;
-    {
-        if (IsDown(key::W) || IsDown(key::ArrowUp)) {
-            Movement.z -= 0.5f;
-        }
-        if (IsDown(key::S) || IsDown(key::ArrowDown)) {
-            Movement.z += 0.5f;
-        }
-        if (IsDown(key::D) || IsDown(key::ArrowRight)) {
-            Movement.x += 0.5f;
-        }
-        if (IsDown(key::A) || IsDown(key::ArrowLeft)) {
-            Movement.x -= 0.5f;
-        }
-        if (IsDown(key::Space)) {
-            Movement.y += 0.5f;
-        }
-
-        bool FlyDown = IsDown(key::C);
-#ifndef PLATFORM_WASM
-        // Ctrl+W will close the browser window
-        FlyDown |= IsDown(key::LeftControl);
-#endif
-        if (FlyDown) {
-            Movement.y -= 0.5f;
-        }
-        CameraPosition += Movement;
-    }
-
-    if (Image.Width != PreviousImage.Width || Image.Height != PreviousImage.Height || v3::Length(Movement) > 0.0f) {
-        PreviousRayCount = 0;
-        RenderData.Reset();
-        PreviousImage.Width = Image.Width;
-        PreviousImage.Height = Image.Height;
-        PreviousImage.Data = (v4 *)RenderData.Push(Image.Width * Image.Height * sizeof(v4));
-    }
-
-    f64 StartTime = QueryTimestampInMilliseconds();
-
-    v3 CameraZ = v3(0.0f, 0.0f, 1.0f);
-    v3 CameraX = v3::Normalize(v3::Cross(v3(0.0f, 1.0f, 0.0f), CameraZ));
-    v3 CameraY = v3::Normalize(v3::Cross(CameraZ, CameraX));
-    v3 FilmCenter = CameraPosition - CameraZ;
-
-    f32 FilmW = 1.0f;
-    f32 FilmH = 1.0f;
-    if (Image.Width > Image.Height) {
-        FilmH = (f32)Image.Height / (f32)Image.Width;
-    } else {
-        FilmW = (f32)Image.Width / (f32)Image.Height;
-    }
-
-#if 1
-    for (u32 y = 0; y < Image.Height; ++y) {
-        for (u32 x = 0; x < Image.Width; ++x) {
-
-            v3 Attenuation = 1.0f;
-            v3 OutputColor = 0.0f;
-
-            f32 JitterX = RandomState.RandomFloat(-0.5f, 0.5f);
-            f32 JitterY = RandomState.RandomFloat(-0.5f, 0.5f);
-            f32 FilmX = -1.0f + ((x + JitterX) * 2.0f) / (f32)Image.Width;
-            f32 FilmY = -1.0f + ((y + JitterY) * 2.0f) / (f32)Image.Height;
-
-            v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
-            v3 RayOrigin = CameraPosition;
-            v3 RayDirection = v3::Normalize(FilmP - RayOrigin);
-
-
-            u32 MaxRayBounce = 8;
-            for (u32 i = 0; i < MaxRayBounce; ++i) {
-                f32 A = (RayDirection.y + 1.0f) * 0.5f;
-                const v3 DefaultColor = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
-                v3x HitEmissive = DefaultColor;
-                v3x HitColor = 0.0f;
-                v3x HitNormal = 0.0f;
-                v3x NextRayOrigin = 0.0f;
-                f32x HitSpecular = 0.0f;
-                f32x MinT = F32Max;
-
-                for (const sphere_group &SphereGroup : Spheres) {
-                    v3x SphereCenter = SphereGroup.Positions - RayOrigin;
-                    f32x T = v3x::Dot(SphereCenter, RayDirection);
-                    v3x ProjectedPoint = v3x(RayDirection) * T;
-
-                    const f32x &Radius = SphereGroup.Radii;
-                    f32x DistanceFromCenter = v3x::Length(SphereCenter - ProjectedPoint);
-
-                    f32x HitMask = DistanceFromCenter < Radius;
-
-                    if (IsZero(HitMask)) continue;
-
-                    f32x X = f32x::SquareRoot(Radius * Radius - DistanceFromCenter * DistanceFromCenter);
-
-                    f32x IntersectionT = T - X;
-                    // f32x::ConditionalMove(&IntersectionT, T + X, IntersectionT < 0);
-
-                    v3x IntersectionPoint = RayDirection * IntersectionT;
-                    f32x MinMask = (IntersectionT < MinT) & (IntersectionT > F32Epsilon);
-                    f32x MoveMask = MinMask & HitMask;
-
-                    v3x Normal = (IntersectionPoint - SphereCenter) * f32x::Reciprocal(Radius);
-                    f32x::ConditionalMove(&MinT, IntersectionT, MoveMask);
-                    v3x::ConditionalMove(&HitColor, SphereGroup.Color, MoveMask);
-                    v3x::ConditionalMove(&HitNormal, Normal, MoveMask);
-                    f32x::ConditionalMove(&HitSpecular, SphereGroup.Specular, MoveMask);
-                    v3x::ConditionalMove(&HitEmissive, 0, MoveMask);
-                    v3x::ConditionalMove(&NextRayOrigin, RayOrigin + IntersectionPoint, MoveMask);
-                }
-
-                u32 Index = f32x::HorizontalMinIndex(MinT);
-                OutputColor += v3(HitEmissive[Index]) * Attenuation;
-                Attenuation *= v3(HitColor[Index]);
-                RayOrigin = v3(NextRayOrigin[Index]);
-
-                f32 Specular = HitSpecular[Index];
-                v3 Normal = v3(HitNormal[Index]);
-                v3 PureBounce = RayDirection - 2.0f * v3::Dot(RayDirection, Normal) * Normal;
-                v3 RandomV3 = v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat());
-                v3 RandomBounce = Normal + RandomV3;
-                RayDirection = (1.0 - Specular) * RandomBounce + (Specular * PureBounce);
-                RayDirection = v3::Normalize(RayDirection);
-
-                if (MinT[Index] == F32Max) break;
-            }
-
-            // v4 Color = v4(C.x, C.y, C.z, 1.0);
-            u32 TotalRayCount = PreviousRayCount + 1;
-            v4 &PreviousColor = GetPixelV4(PreviousImage, x, y);
-            v4 OutputColorV4 = v4(OutputColor.x, OutputColor.y, OutputColor.z, 1.0f);
-            v4 FinalColor = OutputColorV4 * (1.0f / (f32)TotalRayCount) + PreviousColor * ((f32)PreviousRayCount / (f32)TotalRayCount);
-            // v4 FinalColor = Color * (1.0f / TotalRayCount);
-            // v4 FinalColor = OutputColorV4;
-            FinalColor.w = 1.0f;
-            PreviousColor = FinalColor;
-
-            u32 &Pixel = GetPixel(Image, x, y);
-            Pixel = ColorFromV4(LinearToSRGB(FinalColor));
-        }
-    }
-
-    PreviousRayCount += 1;
-#else
-        for (u32 y = 0; y < Image.Height; ++y) {
-            for (u32 x = 0; x < Image.Width; ++x) {
-
-                u32 &Pixel = GetPixel(Image, x, y);
-                Pixel = ColorFromV4(v4(0.0f, 0.0f, 0.0f, 1.0f));
-
-                f32 FilmX = -1.0f + (x * 2.0f) / (f32)Image.Width;
-                f32 FilmY = -1.0f + (y * 2.0f) / (f32)Image.Height;
-
-                v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
-                v3 RayDirection = v3::Normalize(FilmP - Origin);
-                v3 RayOrigin = Origin;
-
-                v3 Attenuation = 1.0f;
-                v3 OutputColor = v3(0.0f);
-
-                u32 MaxRayBounce = 2;
-                for (u32 i = 0; i < MaxRayBounce; ++i) {
-                    v3 HitNormal = 0.0f;
-                    v3 HitColor = 0.0f;
-                    v3 Emissive = 1.0f;
-                    f32 MinT = F32Max;
-                    for (const scalar_sphere &Sphere : ScalarSpheres) {
-                        v3 SphereCenter = Sphere.Position - RayOrigin;
-                        f32 T = v3::Dot(SphereCenter, RayDirection);
-                        v3 ProjectedPoint = RayDirection * T;
-
-                        f32 Radius = Sphere.Radius;
-                        f32 DistanceFromCenter = v3::Length(SphereCenter - ProjectedPoint);
-                        if (DistanceFromCenter > Radius) continue;
-                        if (T < F32Epsilon) continue;
-                        f32 X = SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
-
-                        f32 T1 = T - X;
-                        // f32 T2 = T + X;
-                        // T = (T1 > 0) ? T1 : T2;
-
-                        if (T > MinT) continue;
-                        MinT = T;
-
-                        v3 IntersectionPoint = RayDirection * T1;
-                        v3 Normal = v3::Normalize(IntersectionPoint - SphereCenter);
-                        HitNormal = Normal;
-                        HitColor = Sphere.Color;
-                        Emissive = 0.0f;
-                        RayOrigin = RayOrigin + IntersectionPoint;
-                        RayDirection = HitNormal;
-                    }
-                    OutputColor += Attenuation * Emissive;
-                    Attenuation *= HitColor;
-
-                    if (MinT == F32Max) break;
-                }
-
-                v4 Color = v4(OutputColor.x, OutputColor.y, OutputColor.z, 1.0f);
-                Pixel = ColorFromV4(Color);
-            }
-        }
-#endif
-
-    f64 EndTime = QueryTimestampInMilliseconds();
-    volatile f64 TimeElapsed = EndTime - StartTime;
-    (void)TimeElapsed;
 }

@@ -48,7 +48,7 @@ struct string8 {
 
 /* == Macros == */
 
-#define array_len(arr) (sizeof(arr) / sizeof(*arr)) 
+#define array_len(arr) (sizeof(arr) / sizeof(*arr))
 
 #ifndef SIMD_WIDTH
     #if defined(__AVX2__)
@@ -155,6 +155,23 @@ struct init_params {
 
 void OnInit(init_params *Params);
 void OnRender(const image &Image);
+
+
+struct work_queue_context {
+    u32 WorkEntry;
+    u32 ThreadIndex;
+};
+typedef void (*thread_callback)(work_queue_context *);
+
+u32 GetProcessorThreadCount();
+
+struct work_queue {
+    void *OSData;
+
+    void Create(memory_arena *Arena, thread_callback ThreadCallback, u32 Count);
+    void Start(u32 WorkItemCount);
+    void Wait();
+};
 
 enum class key : u32 {
     Escape = 0x1,
@@ -317,7 +334,7 @@ v2 GetMouseWheelDelta();
 
 
 struct v2 {
-    f32 x = 0.0f, y = 0.0f;
+    f32 x, y;
     inline v2() { };
     inline v2(f32 X);
     inline v2(f32 X, f32 Y);
@@ -333,16 +350,22 @@ MATHCALL v2 operator*(const v2 &A, const v2 &B);
 MATHCALL v2 operator/(const v2 &A, const v2 &B);
 
 struct v3 {
-    f32 x = 0.0f, y = 0.0f, z = 0.0f;
+    f32 x, y, z;
+    f32 _w;
     inline v3() { };
-    inline v3(f32 X);
-    inline v3(f32 X, f32 Y, f32 Z);
+
+    constexpr inline v3(const f32 &&X) : x(X), y(X), z(X), _w(0) { };
+    constexpr inline v3(const f32 &&X, const f32 &&Y, const f32 &&Z) : x(X), y(Y), z(Z), _w(0) { };
+    inline v3(const f32 &X);
+    inline v3(const f32 &X, const f32 &Y, const f32 &Z);
+
     explicit inline v3(const v3_reference &V3);
 
     static inline f32 Dot(const v3 &A, const v3 &B);
     static inline f32 LengthSquared(const v3 &Value);
     static inline f32 Length(const v3 &Value);
     static inline v3 Normalize(const v3 &Value);
+    static inline v3 NormalizeFast(const v3 &Value);
     static inline v3 Cross(const v3 &A, const v3 &B);
 } __attribute__((__vector_size__(12), __aligned__(16)));
 MATHCALL v3 operator+(const v3 &A, const v3 &B);
@@ -363,8 +386,10 @@ MATHCALL void operator/=(v3 &A, const v3 &B) {
     A = A / B;
 }
 
+MATHCALL v3 operator-(const v3 &A);
+
 struct v4 {
-    f32 x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f;
+    f32 x, y, z, w;
     inline v4() { };
     inline v4(f32 X);
     inline v4(f32 X, f32 Y, f32 Z, f32 W);
@@ -463,6 +488,7 @@ struct f32x4 {
     }
 
     static inline f32x4 SquareRoot(const f32x4 &A);
+    static inline f32x4 InverseSquareRoot(const f32x4 &A);
     static inline f32x4 Min(const f32x4 &A, const f32x4 &B);
     static inline f32x4 Max(const f32x4 &A, const f32x4 &B);
     static inline f32x4 Reciprocal(const f32x4 &A);
@@ -495,6 +521,10 @@ struct u32x4 {
         }
     }
 
+    explicit inline u32x4(const f32x4 &V) {
+        __builtin_memcpy(Value, V.Value, sizeof(V.Value));
+    }
+
     inline u32 &operator[](u32 Index) {
         Assert(Index < array_len(Value));
         return Value[Index];
@@ -504,6 +534,8 @@ struct u32x4 {
         Assert(Index < array_len(Value));
         return Value[Index];
     }
+
+    static inline void ConditionalMove(u32x4 *A, const u32x4 &B, const u32x4 &MoveMask);
 } __attribute__((__vector_size__(16), __aligned__(16)));
 
 MATHCALL u32x4 operator+(const u32x4 &A, const u32x4 &B);
@@ -543,7 +575,7 @@ struct f32x8 {
     f32 Value[8];
 
     inline f32x8() { }
-    inline f32x8(const f32 V) {
+    inline constexpr f32x8(const f32 V) : Value() {
         for (u32 i = 0; i < array_len(Value); ++i) {
             Value[i] = V;
         }
@@ -561,6 +593,7 @@ struct f32x8 {
     }
 
     static inline f32x8 SquareRoot(const f32x8 &A);
+    static inline f32x8 InverseSquareRoot(const f32x8 &A);
     static inline f32x8 Min(const f32x8 &A, const f32x8 &B);
     static inline f32x8 Max(const f32x8 &A, const f32x8 &B);
     static inline f32x8 Reciprocal(const f32x8 &A);
@@ -600,6 +633,9 @@ struct u32x8 {
             Value[i] = V;
         }
     }
+    explicit inline u32x8(const f32x8 &V) {
+        __builtin_memcpy(Value, V.Value, sizeof(V.Value));
+    }
 
     inline u32 &operator[](u32 Index) {
         Assert(Index < array_len(Value));
@@ -610,6 +646,8 @@ struct u32x8 {
         Assert(Index < array_len(Value));
         return Value[Index];
     }
+
+    static inline void ConditionalMove(u32x8 *A, const u32x8 &B, const u32x8 &MoveMask);
 } __attribute__((__vector_size__(32), __aligned__(32)));
 
 MATHCALL u32x8 operator+(const u32x8 &A, const u32x8 &B);
@@ -674,6 +712,7 @@ struct v3x8 {
     static inline f32x Length(const v3x8 &A);
     static inline f32x LengthSquared(const v3x8 &A);
     static inline v3x8 Normalize(const v3x8 &A);
+    static inline v3x8 NormalizeFast(const v3x8 &A);
     static inline void ConditionalMove(v3x8 *A, const v3x8 &B, const f32x8 &MoveMask);
 };
 MATHCALL v3x8 operator+(const v3x8 &A, const v3x8 &B) {
@@ -786,6 +825,7 @@ struct v3x4 {
     static inline f32x4 Length(const v3x4 &A);
     static inline f32x4 LengthSquared(const v3x4 &A);
     static inline v3x4 Normalize(const v3x4 &A);
+    static inline v3x4 NormalizeFast(const v3x4 &A);
     static inline void ConditionalMove(v3x4 *A, const v3x4 &B, const f32x4 &MoveMask);
 };
 MATHCALL v3x4 operator+(const v3x4 &A, const v3x4 &B) {
@@ -903,32 +943,36 @@ struct u32x_random_state {
 struct u32_random_state {
     u64 Seed;
 
-    inline u32 PCG() {
+    constexpr inline u32 PCG() {
         u64 OldSeed = Seed;
+#if 1
+        Seed = Seed * 6364136223846793005ULL + 1442695040888963407ULL;
+#else
         Seed = Seed * 6364136223846793005ULL;
-        u64 Result = RotateRight64(((OldSeed >> 18u) ^ OldSeed) >> 27u, OldSeed >> 59u);
+#endif
+        u32 Result = RotateRight32((u32)(OldSeed >> 32) ^ (u32)OldSeed, OldSeed >> 59);
         return Result;
     }
-    inline u32 XorShift() {
+    constexpr inline u32 XorShift() {
         u64 Result = Seed;
         Seed ^= Seed >> 12;
         Seed ^= Seed << 25;
         Seed ^= Seed >> 27;
         return (Result * 0x2545F4914F6CDD1DULL) >> 32;
     }
-    inline u32 LCG() {
+    constexpr inline u32 LCG() {
         u32 Result = this->Seed;
         Seed = Seed * 6364136223846793005ULL + 1442695040888963407ULL;
         return Result;
     }
-    inline u32 RandomInt() {
+    constexpr inline u32 RandomInt() {
         switch (DefaultRandomAlgorithm) {
             case RANDOM_ALGORITHM_PCG: return this->PCG();
             case RANDOM_ALGORITHM_XORSHIFT: return this->XorShift();
             case RANDOM_ALGORITHM_LCG: return this->LCG();
         }
     }
-    inline f32 RandomFloat(f32 Min = -1.0f, f32 Max = 1.0f) {
+    constexpr inline f32 RandomFloat(f32 Min = -1.0f, f32 Max = 1.0f) {
         u32 N = this->RandomInt();
         f32 InverseMaxInt = (Max - Min) / (f64)((u32)-1);
         f32 RandomFloat = (f32)N * InverseMaxInt;

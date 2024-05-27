@@ -25,6 +25,7 @@ union v128 {
     explicit operator v3() const { return Vector3; }
     explicit operator v4() const { return Vector4; }
     explicit operator f32x4() const { return Float4; }
+    explicit operator u32x4() const { return Uint4; }
     operator v128_t() const { return Register; }
 
     MATHCALL v128 CreateMask(bool Value) {
@@ -39,6 +40,10 @@ inline f32x4::f32x4(const u32x4 &V) {
 }
 static inline f32 SquareRoot(f32 Value) {
     return __builtin_sqrt(Value);
+}
+MATHCALL f32 Abs(f32 Value) {
+    if (Value < 0.0f) return -Value;
+    return Value;
 }
 static inline f32 Max(f32 A, f32 B) {
     return __builtin_wasm_max_f32(A, B);
@@ -69,7 +74,7 @@ inline v2::v2(f32 X) {
     v128 Value = wasm_f32x4_splat(X);
     *this = (v2)Value;
 }
-inline v3::v3(f32 X) {
+inline v3::v3(const f32 &X) {
     v128 Value = wasm_f32x4_splat(X);
     *this = (v3)Value;
 }
@@ -81,7 +86,7 @@ inline v2::v2(f32 X, f32 Y) {
     v128 Value = wasm_f32x4_make(X, Y, 0.0f, 0.0f);
     *this = (v2)Value;
 }
-inline v3::v3(f32 X, f32 Y, f32 Z) {
+inline v3::v3(const f32 &X, const f32 &Y, const f32 &Z) {
     v128 Value = wasm_f32x4_make(X, Y, Z, 0.0f);
     *this = (v3)Value;
 }
@@ -132,6 +137,9 @@ inline v3 v3::Normalize(const v3 &Value) {
     v128 MaskedResult = wasm_v128_and(v128(Result), Mask);
     return (v3)MaskedResult;
 }
+inline v3 v3::NormalizeFast(const v3 &Value) {
+    return v3::Normalize(Value);
+}
 MATHCALL v3 operator+(const v3 &A, const v3 &B) {
     v128 Result = wasm_f32x4_add(v128(A), v128(B));
     return (v3)Result;
@@ -146,6 +154,10 @@ MATHCALL v3 operator*(const v3 &A, const v3 &B) {
 }
 MATHCALL v3 operator/(const v3 &A, const v3 &B) {
     v128 Result = wasm_f32x4_div(v128(A), v128(B));
+    return (v3)Result;
+}
+MATHCALL v3 operator-(const v3 &A) {
+    v128 Result = wasm_f32x4_neg(v128(A));
     return (v3)Result;
 }
 
@@ -222,6 +234,9 @@ inline v3x v3x::Normalize(const v3x &Value) {
 
     v3x MaskedResult = Result & LengthGreaterThanZeroMask;
     return MaskedResult;
+}
+inline v3x v3x::NormalizeFast(const v3x &Value) {
+    return v3x::Normalize(Value);
 }
 
 inline void v3x::ConditionalMove(v3x *A, const v3x &B, const f32x &MoveMask) {
@@ -312,4 +327,9 @@ MATHCALL bool IsZero(const f32x4 &Value) {
     v128 ComparisonResult = wasm_f32x4_ne(v128(Value), Zero);
     bool Result = wasm_v128_any_true(ComparisonResult);
     return Result == 0;
+}
+
+inline void u32x4::ConditionalMove(u32x4 *A, const u32x4 &B, const u32x4 &MoveMask) {
+    v128 Result = wasm_v128_bitselect(v128(B), v128(*A), v128(MoveMask));
+    *A = (u32x4)Result;
 }

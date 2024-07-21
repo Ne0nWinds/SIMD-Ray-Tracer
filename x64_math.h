@@ -724,3 +724,23 @@ inline f32x4::f32x4(const u32x4 &V) {
     xmm Result = _mm_cvtepi32_ps(xmm(V));
     *this = (f32x4)Result;
 }
+
+static inline f32 Cosine(f32 radians) {
+	f32 result;
+	__asm {
+		fld float ptr [radians]
+		fcos
+		fstp float ptr [result]
+	}
+	return result;
+}
+
+static inline f32 Sin(f32 radians) {
+	f32 result;
+	__asm {
+		fld float ptr [radians]
+		fsin
+		fstp float ptr [result]
+	}
+	return result;
+}

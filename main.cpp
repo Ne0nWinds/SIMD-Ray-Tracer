@@ -379,23 +379,34 @@ static image PreviousImage = {};
 
 void OnRender(const image &Image) {
 
-    v3 Movement = 0.0f;
+    v3 LookAt = v3(Spheres[0].Positions[1]);
+
+    static f32 DistanceFromLookAt = 1.0f;
+    static f32 XAngle = PI32 / 3.0;
+    static f32 YHeight = 0.0f;
+
+    bool Moved = false;
     {
         constexpr f32 MovementSpeed = 0.125f * WorldScale;
         if (IsDown(key::W) || IsDown(key::ArrowUp)) {
-            Movement.z -= MovementSpeed;
+            DistanceFromLookAt -= MovementSpeed;
+            Moved = true;
         }
         if (IsDown(key::S) || IsDown(key::ArrowDown)) {
-            Movement.z += MovementSpeed;
+            DistanceFromLookAt += MovementSpeed;
+            Moved = true;
         }
         if (IsDown(key::D) || IsDown(key::ArrowRight)) {
-            Movement.x += MovementSpeed;
+            XAngle -= MovementSpeed;
+            Moved = true;
         }
         if (IsDown(key::A) || IsDown(key::ArrowLeft)) {
-            Movement.x -= MovementSpeed;
+            XAngle += MovementSpeed;
+            Moved = true;
         }
         if (IsDown(key::Space)) {
-            Movement.y += MovementSpeed;
+            YHeight += MovementSpeed;
+            Moved = true;
         }
 
         bool FlyDown = IsDown(key::C);
@@ -404,17 +415,31 @@ void OnRender(const image &Image) {
         FlyDown |= IsDown(key::LeftControl);
 #endif
         if (FlyDown) {
-            Movement.y -= MovementSpeed;
+            YHeight -= MovementSpeed;
+            Moved = true;
         }
 
-        if (IsDown(key::LeftShift)) {
-            Movement *= 4.0f;
+        if (XAngle > PI32 * 2.0f) {
+            XAngle -= PI32 * 4.0f;
+        }
+        if (XAngle < -(PI32 * 2.0f)) {
+            XAngle += PI32 * 4.0f;
+        }
+        if (DistanceFromLookAt < 0.5f) {
+            DistanceFromLookAt = 0.5f;
+        }
+        if (YHeight > DistanceFromLookAt) {
+            YHeight = DistanceFromLookAt;
         }
 
-        CameraPosition += Movement;
+        v2 XYPosition = v2(Cosine(XAngle), Sin(XAngle)) * DistanceFromLookAt;
+        CameraPosition.x = XYPosition.x;
+        CameraPosition.y = YHeight;
+        CameraPosition.z = XYPosition.y;
+        CameraPosition += LookAt;
     }
 
-    if (Image.Width != PreviousImage.Width || Image.Height != PreviousImage.Height || v3::Length(Movement) > 0.0f || IsDown(key::R)) {
+    if (Image.Width != PreviousImage.Width || Image.Height != PreviousImage.Height || Moved || IsDown(key::R)) {
         PreviousRayCount = 0;
         RenderData.Reset();
         PreviousImage.Width = Image.Width;
@@ -424,7 +449,7 @@ void OnRender(const image &Image) {
 
     f64 StartTime = QueryTimestampInMilliseconds();
 
-    v3 CameraZ = v3(0.0f, 0.0f, 1.0f);
+    v3 CameraZ = v3::Normalize(CameraPosition - LookAt);
     v3 CameraX = v3::Normalize(v3::Cross(v3(0.0f, 1.0f, 0.0f), CameraZ));
     v3 CameraY = v3::Normalize(v3::Cross(CameraZ, CameraX));
     v3 FilmCenter = CameraPosition - CameraZ;

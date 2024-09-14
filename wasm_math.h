@@ -67,7 +67,7 @@ MATHCALL f32 Saturate(f32 Value) {
     return Value;
 }
 MATHCALL f32 FMA(f32 A, f32 B, f32 C) {
-    return 0.0f;
+    return A*B + C;
 }
 
 inline v2::v2(f32 X) {
@@ -115,6 +115,22 @@ MATHCALL u64 RotateLeft64(u64 Value, s32 Rotation) {
     return __builtin_rotateleft64(Value, Rotation);
 }
 
+MATHCALL v2 operator+(const v2 &A, const v2 &B) {
+    v128 Result = wasm_f32x4_add(v128(A), v128(B));
+    return (v2)Result;
+}
+MATHCALL v2 operator-(const v2 &A, const v2 &B) {
+    v128 Result = wasm_f32x4_sub(v128(A), v128(B));
+    return (v2)Result;
+}
+MATHCALL v2 operator*(const v2 &A, const v2 &B) {
+    v128 Result = wasm_f32x4_mul(v128(A), v128(B));
+    return (v2)Result;
+}
+MATHCALL v2 operator/(const v2 &A, const v2 &B) {
+    v128 Result = wasm_f32x4_div(v128(A), v128(B));
+    return (v2)Result;
+}
 inline f32 v3::Dot(const v3 &A, const v3 &B) {
     v3 Mul = A * B;
     return Mul.x + Mul.y + Mul.z;
@@ -332,4 +348,14 @@ MATHCALL bool IsZero(const f32x4 &Value) {
 inline void u32x4::ConditionalMove(u32x4 *A, const u32x4 &B, const u32x4 &MoveMask) {
     v128 Result = wasm_v128_bitselect(v128(B), v128(*A), v128(MoveMask));
     *A = (u32x4)Result;
+}
+
+#include <math.h>
+
+static inline f32 Cosine(f32 radians) {
+	return cosf(radians);
+}
+
+static inline f32 Sin(f32 radians) {
+	return sinf(radians);
 }

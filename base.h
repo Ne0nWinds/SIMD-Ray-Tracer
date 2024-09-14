@@ -84,9 +84,10 @@ struct string8 {
         #define Break() __debugbreak()
         #define Assert(Expr) if (!(Expr)) Break()
     #elif defined(PLATFORM_WASM)
-        void __attribute__((import_name("__break"))) __break();
-        #define Break() __break()
-        #define Assert(Expr) if (!(Expr)) Break()
+        // void __attribute__((import_name("__break"))) __break();
+		#include <assert.h>
+        #define Break() assert(0)
+        #define Assert(Expr) assert((Expr))
     #endif
 #endif
 

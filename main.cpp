@@ -155,6 +155,7 @@ static inline v4& GetPixelV4(const image &Image, u32 X, u32 Y) {
 }
 static inline u32& GetPixel(const image &Image, u32 X, u32 Y) {
     u32 *ImageData = (u32 *)Image.Data;
+    return ImageData[Y * Image.Width + X];
 #if defined(PLATFORM_WASM)
     Y = Image.Height - Y - 1;
     return ImageData[Y * Image.Width + X];
@@ -344,7 +345,7 @@ static memory_arena ThreadData;
 static work_queue WorkQueue;
 
 void OnInit(init_params *Params) {
-    constexpr string8 WindowTitle = u8"Raytracing In One Weekend";
+    constexpr string8 WindowTitle = u8"SIMD Ray Tracer";
     Params->WindowTitle = WindowTitle;
 
     Params->WindowWidth = 1280;

@@ -37,7 +37,6 @@ error:
     return 0;
 }
 
-
 memory_arena AllocateArenaFromOS(u32 Size, u64 StartingAddress) {
     memory_arena Result = {0};
 

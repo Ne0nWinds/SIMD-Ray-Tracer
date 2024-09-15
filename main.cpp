@@ -276,7 +276,7 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
                     v3x IntersectionPoint = RayDirection * IntersectionT;
                     v3x Normal = (IntersectionPoint - SphereCenter);
                     f32x::ConditionalMove(&InsideSphere, 1.0f, IntersectionTest & MoveMask);
-                    u32x::ConditionalMove(&MaterialIndex, s * 8 + 1, u32x(MoveMask));
+                    u32x::ConditionalMove(&MaterialIndex, s * SIMD_WIDTH + 1, u32x(MoveMask));
                     f32x::ConditionalMove(&MinT, IntersectionT, MoveMask);
                     v3x::ConditionalMove(&HitNormal, Normal, MoveMask);
                     v3x::ConditionalMove(&NextRayOrigin, RayOrigin + IntersectionPoint, MoveMask);

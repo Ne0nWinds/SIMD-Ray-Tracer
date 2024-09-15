@@ -71,11 +71,9 @@ u32 GetProcessorThreadCount() {
 }
 
 static void InitializeWebGL() {
-	constexpr char CanvasName[] = "#canvas";
-	f64 Width, Height = 0;
-	emscripten_get_element_css_size(CanvasName, &Width, &Height);
 	CanvasWidth = EM_ASM_INT({ return window.innerWidth; });
 	CanvasHeight = EM_ASM_INT({ return window.innerHeight; });
+	constexpr char CanvasName[] = "#canvas";
 	emscripten_set_canvas_element_size(CanvasName, CanvasWidth, CanvasHeight);
 
 	EmscriptenWebGLContextAttributes Attributes = {0};
@@ -608,6 +606,12 @@ f64 QueryTimestampInMilliseconds() {
 	});
 }
 
+static EM_BOOL WindowResizeCallback(int eventType, const EmscriptenUiEvent* uiEvent, void* userData) {
+	CanvasWidth = EM_ASM_INT({ return window.innerWidth; });
+	CanvasHeight = EM_ASM_INT({ return window.innerHeight; });
+	return EM_TRUE;
+}
+
 int main() {
 	InitializeWebGL();
 	InitOSProperties();
@@ -619,4 +623,6 @@ int main() {
 
 	emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, EM_FALSE, KeyCallbackFunction);
 	emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, EM_FALSE, KeyCallbackFunction);
+
+	emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, true, WindowResizeCallback);
 }

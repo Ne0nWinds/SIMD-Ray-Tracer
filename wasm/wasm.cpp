@@ -177,18 +177,384 @@ static EM_BOOL RequestAnimationFrameCallback(double time, void *) {
 	return EM_TRUE;
 }
 
+static u64 KeyboardState[2];
+static u64 PreviousKeyboardState[2];
+
+static void SetKeyDown(key Key) {
+    bool HighBits = (u32)Key >= 64;
+    u64 BitToSet = (u64)Key;
+    if (HighBits) BitToSet -= 64;
+    KeyboardState[HighBits] |= 1 << BitToSet;
+}
+static void SetKeyUp(key Key) {
+    bool HighBits = (u32)Key >= 64;
+    u64 BitToSet = (u64)Key;
+    if (HighBits) BitToSet -= 64;
+    KeyboardState[HighBits] &= ~(1 << BitToSet);
+}
+
+static constexpr u32 KeyCodeHash(const char *Code) {
+	u64 OutputHash = 0xFC738A83F87CC9C8;
+	u32 Index = 0;
+	char C = Code[Index];
+	do {
+		OutputHash += C;
+		OutputHash *= 0x2321842E1AE88BC3;
+		C = Code[++Index];
+	} while (C);
+	return OutputHash ^ (OutputHash >> 32);
+}
+
 static EM_BOOL KeyCallbackFunction(int EventType, const EmscriptenKeyboardEvent *Event, void *) {
 
-	emscripten_log(EM_LOG_CONSOLE, "%d\n", EventType);
+	// if (Event->code[0] == 'F' && Event->code[1] == '1') {
+	// 	emscripten_console_log("F1");
+	// }
+	u32 EventCodeHash = KeyCodeHash(Event->code);
 
-	return EM_TRUE;
+	key Key;
+    switch (EventCodeHash) {
+        case KeyCodeHash("Escape"): {
+            Key = key::Escape;
+        } break;
+        case KeyCodeHash("Digit1"): {
+            Key = key::One;
+        } break;
+        case KeyCodeHash("Digit2"): {
+            Key = key::Two;
+        } break;
+        case KeyCodeHash("Digit3"): {
+            Key = key::Three;
+        } break;
+        case KeyCodeHash("Digit4"): {
+            Key = key::Four;
+        } break;
+        case KeyCodeHash("Digit5"): {
+            Key = key::Five;
+        } break;
+        case KeyCodeHash("Digit6"): {
+            Key = key::Six;
+        } break;
+        case KeyCodeHash("Digit7"): {
+            Key = key::Seven;
+        } break;
+        case KeyCodeHash("Digit8"): {
+            Key = key::Eight;
+        } break;
+        case KeyCodeHash("Digit9"): {
+            Key = key::Nine;
+        } break;
+        case KeyCodeHash("Digit0"): {
+            Key = key::Zero;
+        } break;
+        case KeyCodeHash("Minus"): {
+            Key = key::Minus;
+        } break;
+        case KeyCodeHash("Equal"): {
+            Key = key::Plus;
+        } break;
+        case KeyCodeHash("Backspace"): {
+            Key = key::Backspace;
+        } break;
+        case KeyCodeHash("Tab"): {
+            Key = key::Tab;
+        } break;
+        case KeyCodeHash("KeyQ"): {
+            Key = key::Q;
+        } break;
+        case KeyCodeHash("KeyW"): {
+            Key = key::W;
+        } break;
+        case KeyCodeHash("KeyE"): {
+            Key = key::E;
+        } break;
+        case KeyCodeHash("KeyR"): {
+            Key = key::R;
+        } break;
+        case KeyCodeHash("KeyT"): {
+            Key = key::T;
+        } break;
+        case KeyCodeHash("KeyY"): {
+            Key = key::Y;
+        } break;
+        case KeyCodeHash("KeyU"): {
+            Key = key::U;
+        } break;
+        case KeyCodeHash("KeyI"): {
+            Key = key::I;
+        } break;
+        case KeyCodeHash("KeyO"): {
+            Key = key::O;
+        } break;
+        case KeyCodeHash("KeyP"): {
+            Key = key::P;
+        } break;
+        case KeyCodeHash("BracketLeft"): {
+            Key = key::LeftBracket;
+        } break;
+        case KeyCodeHash("BracketRight"): {
+            Key = key::RightBracket;
+        } break;
+        case KeyCodeHash("Enter"): {
+            Key = key::Enter;
+        } break;
+        case KeyCodeHash("ControlLeft"): {
+            Key = key::LeftControl;
+        } break;
+        case KeyCodeHash("KeyA"): {
+            Key = key::A;
+        } break;
+        case KeyCodeHash("KeyS"): {
+            Key = key::S;
+        } break;
+        case KeyCodeHash("KeyD"): {
+            Key = key::D;
+        } break;
+        case KeyCodeHash("KeyF"): {
+            Key = key::F;
+        } break;
+        case KeyCodeHash("KeyG"): {
+            Key = key::G;
+        } break;
+        case KeyCodeHash("KeyH"): {
+            Key = key::H;
+        } break;
+        case KeyCodeHash("KeyJ"): {
+            Key = key::J;
+        } break;
+        case KeyCodeHash("KeyK"): {
+            Key = key::K;
+        } break;
+        case KeyCodeHash("KeyL"): {
+            Key = key::L;
+        } break;
+        case KeyCodeHash("Semicolon"): {
+            Key = key::Semicolon;
+        } break;
+        case KeyCodeHash("Quote"): {
+            Key = key::Quote;
+        } break;
+        case KeyCodeHash("Backquote"): {
+            Key = key::GraveAccent;
+        } break;
+        case KeyCodeHash("ShiftLeft"): {
+            Key = key::LeftShift;
+        } break;
+        case KeyCodeHash("Backslash"): {
+            Key = key::Pipe;
+        } break;
+        case KeyCodeHash("Z"): {
+            Key = key::Z;
+        } break;
+        case KeyCodeHash("KeyX"): {
+            Key = key::X;
+        } break;
+        case KeyCodeHash("KeyC"): {
+            Key = key::C;
+        } break;
+        case KeyCodeHash("KeyV"): {
+            Key = key::V;
+        } break;
+        case KeyCodeHash("KeyB"): {
+            Key = key::B;
+        } break;
+        case KeyCodeHash("KeyN"): {
+            Key = key::N;
+        } break;
+        case KeyCodeHash("KeyM"): {
+            Key = key::M;
+        } break;
+        case KeyCodeHash("Comma"): {
+            Key = key::Comma;
+        } break;
+        case KeyCodeHash("Period"): {
+            Key = key::Period;
+        } break;
+        case KeyCodeHash("Slash"): {
+            Key = key::QuestionMark;
+        } break;
+        case KeyCodeHash("ShiftRight"): {
+            Key = key::RightShift;
+        } break;
+        case KeyCodeHash("NumpadMultiply"): {
+            Key = key::NumpadMultiply;
+        } break;
+        case KeyCodeHash("AltLeft"): {
+            Key = key::LeftAlt;
+        } break;
+        case KeyCodeHash("Space"): {
+            Key = key::Space;
+        } break;
+        case KeyCodeHash("CapsLock"): {
+            Key = key::CapsLock;
+        } break;
+        case KeyCodeHash("F1"): {
+            Key = key::F1;
+        } break;
+        case KeyCodeHash("F2"): {
+            Key = key::F2;
+        } break;
+        case KeyCodeHash("F3"): {
+            Key = key::F3;
+        } break;
+        case KeyCodeHash("F4"): {
+            Key = key::F4;
+        } break;
+        case KeyCodeHash("F5"): {
+            Key = key::F5;
+        } break;
+        case KeyCodeHash("F6"): {
+            Key = key::F6;
+        } break;
+        case KeyCodeHash("F7"): {
+            Key = key::F7;
+        } break;
+        case KeyCodeHash("F8"): {
+            Key = key::F8;
+        } break;
+        case KeyCodeHash("F9"): {
+            Key = key::F9;
+        } break;
+        case KeyCodeHash("F10"): {
+            Key = key::F10;
+        } break;
+        case KeyCodeHash("Pause--"): {
+            Key = key::Pause;
+        } break;
+        case KeyCodeHash("ScrollLock"): {
+            Key = key::ScrollLock;
+        } break;
+        case KeyCodeHash("Numpad7"): {
+            Key = key::Numpad7;
+        } break;
+        case KeyCodeHash("Numpad8"): {
+            Key = key::Numpad8;
+        } break;
+        case KeyCodeHash("Numpad9"): {
+            Key = key::Numpad9;
+        } break;
+        case KeyCodeHash("NumpadMinus"): {
+            Key = key::NumpadMinus;
+        } break;
+        case KeyCodeHash("Numpad4"): {
+            Key = key::Numpad4;
+        } break;
+        case KeyCodeHash("Numpad5"): {
+            Key = key::Numpad5;
+        } break;
+        case KeyCodeHash("Numpad6"): {
+            Key = key::Numpad6;
+        } break;
+        case KeyCodeHash("NumpadPlus"): {
+            Key = key::NumpadPlus;
+        } break;
+        case KeyCodeHash("Numpad1"): {
+            Key = key::Numpad1;
+        } break;
+        case KeyCodeHash("Numpad2"): {
+            Key = key::Numpad2;
+        } break;
+        case KeyCodeHash("Numpad3"): {
+            Key = key::Numpad3;
+        } break;
+        case KeyCodeHash("Numpad0"): {
+            Key = key::Numpad0;
+        } break;
+        case KeyCodeHash("NumpadPeriod"): {
+            Key = key::NumpadPeriod;
+        } break;
+        case KeyCodeHash("AltPrintScreen"): {
+            Key = key::AltPrintScreen;
+        } break;
+        case KeyCodeHash("_Unused"): {
+            Key = key::_Unused;
+        } break;
+        case KeyCodeHash("OEM10"): {
+            Key = key::OEM10;
+        } break;
+        case KeyCodeHash("F11"): {
+            Key = key::F11;
+        } break;
+        case KeyCodeHash("F12"): {
+            Key = key::F12;
+        } break;
+        case KeyCodeHash("MetaLeft"): {
+            Key = key::LeftWindows;
+        } break;
+        case KeyCodeHash("AltRight"): {
+            Key = key::RightAlt;
+        } break;
+        case KeyCodeHash("MetaRight"): {
+            Key = key::RightWindows;
+        } break;
+        case KeyCodeHash("Menu"): {
+            Key = key::Menu;
+        } break;
+        case KeyCodeHash("ControlRight"): {
+            Key = key::RightControl;
+        } break;
+        case KeyCodeHash("Insert"): {
+            Key = key::Insert;
+        } break;
+        case KeyCodeHash("Home"): {
+            Key = key::Home;
+        } break;
+        case KeyCodeHash("PageUp"): {
+            Key = key::PageUp;
+        } break;
+        case KeyCodeHash("Delete"): {
+            Key = key::Delete;
+        } break;
+        case KeyCodeHash("End"): {
+            Key = key::End;
+        } break;
+        case KeyCodeHash("PageDown"): {
+            Key = key::PageDown;
+        } break;
+        case KeyCodeHash("ArrowUp"): {
+            Key = key::ArrowUp;
+        } break;
+        case KeyCodeHash("ArrowLeft"): {
+            Key = key::ArrowLeft;
+        } break;
+        case KeyCodeHash("ArrowDown"): {
+            Key = key::ArrowDown;
+        } break;
+        case KeyCodeHash("ArrowRight"): {
+            Key = key::ArrowRight;
+        } break;
+        case KeyCodeHash("NumLock"): {
+            Key = key::NumLock;
+        } break;
+        case KeyCodeHash("NumpadForwardSlash"): {
+            Key = key::NumpadForwardSlash;
+        } break;
+        case KeyCodeHash("NumpadEnter"): {
+            Key = key::NumpadEnter;
+        } break;
+    }
+
+	if (EventType == EMSCRIPTEN_EVENT_KEYDOWN) {
+		SetKeyDown(Key);
+	} else {
+		SetKeyUp(Key);
+	}
+	return EM_FALSE;
 }
 
 bool IsDown(key Key) {
-	return false;
+    bool HighBits = (u32)Key >= 64;
+    u64 BitToSet = (u64)Key;
+    if (HighBits) BitToSet -= 64;
+    bool Result = (KeyboardState[HighBits] & (1 << BitToSet)) != 0;
+    return Result;
 }
 bool IsUp(key Key) {
-	return false;
+    bool HighBits = (u32)Key >= 64;
+    u64 BitToSet = (u64)Key;
+    if (HighBits) BitToSet -= 64;
+    bool Result = (KeyboardState[HighBits] & (1 << BitToSet)) == 0;
+    return Result;
 }
 
 struct thread_function_data;

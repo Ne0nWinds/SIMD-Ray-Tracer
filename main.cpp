@@ -286,6 +286,7 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
                 if (MinT[Index] == F32Max) break;
 
                 const material &Material = Materials[Index + MaterialIndex[Index]];
+
                 OutputColor += Material.Emissive * Attenuation;
                 Attenuation *= Material.Color;
                 RayOrigin = v3(NextRayOrigin[Index]);
@@ -362,9 +363,9 @@ void OnInit(init_params *Params) {
     for (u32 i = 0; i < ThreadCount + 1; ++i) {
         u64 InitialSeed = 0x420247153476526ULL * (u64)i;
         InitialSeed += 0x8442885C91A5C8DULL;
-        InitialSeed ^= InitialSeed >> (7 + i);
+        InitialSeed ^= InitialSeed >> ((7 + i) % 64);
         InitialSeed ^= InitialSeed << 23;
-        InitialSeed ^= InitialSeed >> (0x29 ^ i);
+        InitialSeed ^= InitialSeed >> ((0x29 ^ i) % 64);
         InitialSeed = (InitialSeed * 0x11C19226CEB4769AULL) + 0x1105404122082911ULL;
         InitialSeed ^= InitialSeed << 19;
         InitialSeed ^= InitialSeed >> 13;

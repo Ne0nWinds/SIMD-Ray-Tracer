@@ -902,7 +902,7 @@ constexpr static u32 F32SignBit = 0x8000'0000;
 #define RANDOM_ALGORITHM_XORSHIFT 2
 #define RANDOM_ALGORITHM_LCG 3
 
-static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_XORSHIFT;
+static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_LCG;
 
 struct u32x_random_state {
     u32x Seed;

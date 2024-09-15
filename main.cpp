@@ -5,27 +5,24 @@ static v3 CameraPosition;
 static u32 PreviousRayCount = 0;
 static constexpr u32 TileSize = 32;
 
-struct scalar_sphere {
-    v3 Position;
-    f32 Radius;
-    v3 Color;
-    f32 Specular;
-    v3 Emissive;
-    f32 IndexOfRefraction;
-};
-
-struct sphere_group {
-    v3x Positions;
-    f32x Radii;
-};
 struct material {
     v3 Color;
     v3 Emissive;
     f32 Specular;
     f32 IndexOfRefraction;
 };
+struct scalar_sphere {
+    v3 Position;
+    f32 Radius;
+    material Material;
+};
 
-static scalar_sphere ScalarSpheres[8];
+struct sphere_group {
+    v3x Positions;
+    f32x Radii;
+};
+
+static scalar_sphere ScalarSpheres[128];
 static sphere_group Spheres[array_len(ScalarSpheres) / SIMD_WIDTH];
 static material Materials[array_len(ScalarSpheres) + 1];
 
@@ -35,10 +32,10 @@ constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v
     Sphere->Position.y = Position.y * WorldScale;
     Sphere->Position.z = Position.z * WorldScale;
     Sphere->Radius = Radius * WorldScale;
-    Sphere->Color = Color;
-    Sphere->Specular = Specular;
-    Sphere->Emissive = Emissive;
-    Sphere->IndexOfRefraction = IndexOfRefraction;
+    Sphere->Material.Color = Color;
+    Sphere->Material.Specular = Specular;
+    Sphere->Material.Emissive = Emissive;
+    Sphere->Material.IndexOfRefraction = IndexOfRefraction;
 }
 
 static constexpr inline void InitScalarSpheres(scalar_sphere *SpheresArray) {
@@ -52,7 +49,7 @@ static constexpr inline void InitScalarSpheres(scalar_sphere *SpheresArray) {
     CreateScalarSphere(v3(-3.0f, 3.0f, -30.0f), 2.5f, v3(0.25f, 0.15f, 0.12f), 1.0f, 0.0f, 0.0f, ScalarSpheres + 6);
     CreateScalarSphere(v3(-12.0f, 3.0f, -45.0f), 1.0f, v3(0.65f, 0.25f, 0.42f), 0.0f, 0.0f, 0.0f, ScalarSpheres + 7);
     
-#elif 0
+#elif 1
     u32_random_state RandomState = { 0xCD46749A57ACB371 };
     constexpr u32 Length = array_len(ScalarSpheres);
     for (u32 i = 0; i < Length; ++i) {
@@ -109,10 +106,11 @@ static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * co
         for (u32 j = 0; j < SIMD_WIDTH; ++j) {
             scalar_sphere Sphere = Spheres[i + j];
             material &Material = Materials[i + j + 1];
-            Material.Color = Sphere.Color;
-            Material.Specular = Sphere.Specular;
-            Material.Emissive = Sphere.Emissive;
-            Material.IndexOfRefraction = Sphere.IndexOfRefraction;
+            Material = Sphere.Material;
+            // Material.Color = Sphere.Color;
+            // Material.Specular = Sphere.Specular;
+            // Material.Emissive = Sphere.Emissive;
+            // Material.IndexOfRefraction = Sphere.IndexOfRefraction;
         }
     }
 }
@@ -166,22 +164,22 @@ static inline u32& GetPixel(const image &Image, u32 X, u32 Y) {
 
 
 static f32 LinearToSRGB(f32 L) {
-	f32 Result; 
+    f32 Result;
 
-	L = Saturate(L);
+    L = Saturate(L);
 
-	if (L < 0.0031308f) {
-		Result = L * 12.92f;
-	} else {
+    if (L < 0.0031308f) {
+        Result = L * 12.92f;
+    } else {
 #if 0
-		Result = 1.055f * powf(L, 1.0f / 2.4f) - 0.055f;
+        Result = 1.055f * powf(L, 1.0f / 2.4f) - 0.055f;
 #else
-		// bad but fast code
-		Result = SquareRoot(L);
+        // bad but fast code
+        Result = SquareRoot(L);
 #endif
-	}
+    }
 
-	return Result;
+    return Result;
 }
 
 static v4 LinearToSRGB(v4 L) {
@@ -276,7 +274,7 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
                     v3x IntersectionPoint = RayDirection * IntersectionT;
                     v3x Normal = (IntersectionPoint - SphereCenter);
                     f32x::ConditionalMove(&InsideSphere, 1.0f, IntersectionTest & MoveMask);
-                    u32x::ConditionalMove(&MaterialIndex, s * SIMD_WIDTH + 1, u32x(MoveMask));
+                    u32x::ConditionalMove(&MaterialIndex, s, u32x(MoveMask));
                     f32x::ConditionalMove(&MinT, IntersectionT, MoveMask);
                     v3x::ConditionalMove(&HitNormal, Normal, MoveMask);
                     v3x::ConditionalMove(&NextRayOrigin, RayOrigin + IntersectionPoint, MoveMask);
@@ -285,7 +283,8 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
                 u32 Index = f32x::HorizontalMinIndex(MinT);
                 if (MinT[Index] == F32Max) break;
 
-                const material &Material = Materials[Index + MaterialIndex[Index]];
+                const u32 AbsoluteIndex = MaterialIndex[Index] * 8 + Index + 1;
+                const material &Material = Materials[AbsoluteIndex];
 
                 OutputColor += Material.Emissive * Attenuation;
                 Attenuation *= Material.Color;
@@ -337,8 +336,141 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
         }
     }
 
+}
 
-    return;
+static void RenderTileScalar(work_queue_context *WorkQueueContext) {
+    u32_random_state &RandomState = ThreadContexts[WorkQueueContext->ThreadIndex].RandomState;
+
+    const image &Image = CameraInfo.Image;
+    const image &PreviousImage = CameraInfo.PreviousImage;
+    const v3 &FilmCenter = CameraInfo.FilmCenter;
+    const v3 &FilmW = CameraInfo.FilmW;
+    const v3 &FilmH = CameraInfo.FilmH;
+    const v3 &CameraX = CameraInfo.CameraX;
+    const v3 &CameraY = CameraInfo.CameraY;
+    // const v3 &CameraZ = CameraInfo.CameraZ;
+
+    u32 Tile = WorkQueueContext->WorkEntry;
+    u32 TileX = Tile % CameraInfo.TilesX;
+    u32 TileY = Tile / CameraInfo.TilesX;
+    u32 TileTop = TileY * TileSize;
+    u32 TileLeft = TileX * TileSize;
+    u32 TileBottom = TileTop + Min(TileSize, Image.Height - TileTop);
+    u32 TileRight = TileLeft + Min(TileSize, Image.Width - TileLeft);
+
+    for (u32 y = TileTop; y < TileBottom; ++y) {
+        for (u32 x = TileLeft; x < TileRight; ++x) {
+
+            v3 Attenuation = 1.0f;
+            v3 OutputColor = 0.0f;
+
+            f32 JitterX = RandomState.RandomFloat(-0.5f, 0.5f);
+            f32 JitterY = RandomState.RandomFloat(-0.5f, 0.5f);
+            f32 FilmX = -1.0f + ((x + JitterX) * 2.0f) / (f32)Image.Width;
+            f32 FilmY = -1.0f + ((y + JitterY) * 2.0f) / (f32)Image.Height;
+
+            v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
+            v3 RayOrigin = CameraPosition;
+            v3 RayDirection = v3::Normalize(FilmP - RayOrigin);
+
+            u32 MaxRayBounce = 5;
+            for (u32 i = 0; i < MaxRayBounce; ++i) {
+                f32 A = (RayDirection.y + 1.0f) * 0.5f;
+                // Materials[0].Emissive = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
+                (void)A;
+
+                v3 HitNormal = 0.0f;
+                v3 NextRayOrigin = 0.0f;
+                f32 MinT = F32Max;
+                u32 SphereIndex = 0;
+                bool RayOriginInSphere = false;
+
+                for (u32 s = 0; s < array_len(ScalarSpheres); ++s) {
+                    const scalar_sphere &Sphere = ScalarSpheres[s];
+                    v3 SphereCenter = Sphere.Position - RayOrigin;
+                    f32 T = v3::Dot(SphereCenter, RayDirection);
+                    v3 ProjectedPoint = RayDirection * T;
+
+                    const f32 &Radius = Sphere.Radius;
+                    const f32 RadiusSquared = Radius * Radius;
+                    f32 DistanceFromCenter = v3::LengthSquared(SphereCenter - ProjectedPoint);
+
+                    if (DistanceFromCenter > RadiusSquared) {
+                        continue;
+                    }
+
+                    f32 X = SquareRoot(RadiusSquared - DistanceFromCenter);
+                    f32 IntersectionT = T - X;
+                    bool IntersectionTest = IntersectionT < F32Epsilon;
+                    if (IntersectionTest) {
+                        IntersectionT = T + X;
+                    }
+
+                    if (IntersectionT > MinT) continue;
+                    if (IntersectionT < F32Epsilon) continue;
+
+                    v3 IntersectionPoint = RayDirection * IntersectionT;
+                    v3 Normal = (IntersectionPoint - SphereCenter);
+
+                    RayOriginInSphere = IntersectionTest;
+                    SphereIndex = s;
+                    MinT = IntersectionT;
+                    HitNormal = Normal;
+                    NextRayOrigin = RayOrigin + IntersectionPoint;
+                }
+
+                if (MinT == F32Max) break;
+
+                const material &Material = ScalarSpheres[SphereIndex].Material;
+
+                OutputColor += Material.Emissive * Attenuation;
+                Attenuation *= Material.Color;
+                RayOrigin = NextRayOrigin;
+
+                f32 Specular = Material.Specular;
+                v3 Normal = v3::Normalize(HitNormal);
+
+                v3 PureBounce = RayDirection - 2.0f * v3::Dot(RayDirection, Normal) * Normal;
+
+                if (RayOriginInSphere) {
+                    Normal = -Normal;
+                }
+
+                if (Material.IndexOfRefraction == 0.0f) {
+                    v3 RandomV3 = v3::NormalizeFast(v3(RandomState.RandomFloat(), RandomState.RandomFloat(), RandomState.RandomFloat()));
+                    v3 RandomBounce = Normal + RandomV3;
+                    RayDirection = (1.0 - Specular) * RandomBounce + (Specular * PureBounce);
+                    RayDirection = v3::Normalize(RayDirection);
+                } else {
+                    f32 RefractionIndex = (RayOriginInSphere) ? Material.IndexOfRefraction : 1.0f / Material.IndexOfRefraction;
+
+                    f32 CosTheta = Min(v3::Dot(-RayDirection, Normal), 1.0f);
+                    f32 SinTheta = SquareRoot(1.0 - CosTheta * CosTheta);
+
+                    bool CantRefract = RefractionIndex * SinTheta > 1.0f;
+                    v3 Perpendicular = RefractionIndex * (RayDirection + CosTheta * Normal);
+                    v3 Parallel = -SquareRoot(Abs(1.0f - v3::Dot(Perpendicular, Perpendicular))) * Normal;
+                    v3 RefractedRay = v3::Normalize(Perpendicular + Parallel);
+
+                    if ((CantRefract || Reflectance(CosTheta, RefractionIndex) > RandomState.RandomFloat(0.0f)) && !RayOriginInSphere) {
+                        RayDirection = PureBounce;
+                    } else {
+                        RayDirection = RefractedRay;
+                    }
+                }
+            }
+
+            u32 TotalRayCount = PreviousRayCount + 1;
+            v4 &PreviousColor = GetPixelV4(PreviousImage, x, y);
+            v4 OutputColorV4 = v4(OutputColor.x, OutputColor.y, OutputColor.z, 1.0f);
+            v4 FinalColor = OutputColorV4 * (1.0f / (f32)TotalRayCount) + PreviousColor * ((f32)PreviousRayCount / (f32)TotalRayCount);
+            FinalColor.w = 1.0f;
+            PreviousColor = FinalColor;
+
+            u32 &Pixel = GetPixel(Image, x, y);
+            Pixel = ColorFromV4(LinearToSRGB(FinalColor));
+        }
+    }
 }
 
 static memory_arena RenderData;
@@ -373,7 +505,11 @@ void OnInit(init_params *Params) {
         ThreadContexts[i].RandomState = RandomState;
         // ThreadContexts[i].CameraInfo = &CameraInfo;
     }
+#if 1
     WorkQueue.Create(&ThreadData, RenderTile, ThreadCount);
+#else
+    WorkQueue.Create(&ThreadData, RenderTileScalar, ThreadCount);
+#endif
 }
 
 
@@ -486,69 +622,8 @@ void OnRender(const image &Image) {
     WorkQueue.Wait();
 
     PreviousRayCount += 1;
-#if 1
-#else
-        for (u32 y = 0; y < Image.Height; ++y) {
-            for (u32 x = 0; x < Image.Width; ++x) {
-
-                u32 &Pixel = GetPixel(Image, x, y);
-                Pixel = ColorFromV4(v4(0.0f, 0.0f, 0.0f, 1.0f));
-
-                f32 FilmX = -1.0f + (x * 2.0f) / (f32)Image.Width;
-                f32 FilmY = -1.0f + (y * 2.0f) / (f32)Image.Height;
-
-                v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
-                v3 RayDirection = v3::Normalize(FilmP - Origin);
-                v3 RayOrigin = Origin;
-
-                v3 Attenuation = 1.0f;
-                v3 OutputColor = v3(0.0f);
-
-                u32 MaxRayBounce = 2;
-                for (u32 i = 0; i < MaxRayBounce; ++i) {
-                    v3 HitNormal = 0.0f;
-                    v3 HitColor = 0.0f;
-                    v3 Emissive = 1.0f;
-                    f32 MinT = F32Max;
-                    for (const scalar_sphere &Sphere : ScalarSpheres) {
-                        v3 SphereCenter = Sphere.Position - RayOrigin;
-                        f32 T = v3::Dot(SphereCenter, RayDirection);
-                        v3 ProjectedPoint = RayDirection * T;
-
-                        f32 Radius = Sphere.Radius;
-                        f32 DistanceFromCenter = v3::Length(SphereCenter - ProjectedPoint);
-                        if (DistanceFromCenter > Radius) continue;
-                        if (T < F32Epsilon) continue;
-                        f32 X = SquareRoot(Radius*Radius - DistanceFromCenter*DistanceFromCenter);
-
-                        f32 T1 = T - X;
-                        // f32 T2 = T + X;
-                        // T = (T1 > 0) ? T1 : T2;
-
-                        if (T > MinT) continue;
-                        MinT = T;
-
-                        v3 IntersectionPoint = RayDirection * T1;
-                        v3 Normal = v3::Normalize(IntersectionPoint - SphereCenter);
-                        HitNormal = Normal;
-                        HitColor = Sphere.Color;
-                        Emissive = 0.0f;
-                        RayOrigin = RayOrigin + IntersectionPoint;
-                        RayDirection = HitNormal;
-                    }
-                    OutputColor += Attenuation * Emissive;
-                    Attenuation *= HitColor;
-
-                    if (MinT == F32Max) break;
-                }
-
-                v4 Color = v4(OutputColor.x, OutputColor.y, OutputColor.z, 1.0f);
-                Pixel = ColorFromV4(Color);
-            }
-        }
-#endif
-
     f64 EndTime = QueryTimestampInMilliseconds();
     volatile f64 TimeElapsed = EndTime - StartTime;
+    // emscripten_log(EM_LOG_CONSOLE, "%.3f", (f32)TimeElapsed);
     (void)TimeElapsed;
 }

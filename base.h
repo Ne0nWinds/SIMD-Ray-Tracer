@@ -175,6 +175,7 @@ struct work_queue {
 };
 
 enum class key : u32 {
+	None = 0x0,
     Escape = 0x1,
 	One,
 	Two,

@@ -345,6 +345,77 @@ MATHCALL bool IsZero(const f32x4 &Value) {
     return Result == 0;
 }
 
+MATHCALL u32x4 operator+(const u32x4 &A, const u32x4 &B) {
+	v128 Result = wasm_i32x4_add(v128(A), v128(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator-(const u32x4 &A, const u32x4 &B) {
+    v128 Result = wasm_i32x4_sub(v128(A), v128(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator*(const u32x4 &A, const u32x4 &B) {
+    v128 Result = wasm_i32x4_mul(v128(A), v128(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator==(const u32x4 &A, const u32x4 &B) {
+    v128 Result = wasm_i32x4_eq(v128(A), v128(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator!=(const u32x4 &A, const u32x4 &B) {
+    v128 Result = wasm_i32x4_ne(v128(A), v128(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator>(const u32x4 &A, const u32x4 &B) {
+    v128 Result = wasm_u32x4_gt(v128(A), v128(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator<(const u32x4 &A, const u32x4 &B) {
+    v128 Result = wasm_u32x4_lt(v128(A), v128(B));
+    return (u32x4)Result;
+}
+
+MATHCALL u32x4 operator&(const u32x4 &A, const u32x4 &B) {
+    v128 Result = wasm_v128_and(v128(A), v128(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator|(const u32x4 &A, const u32x4 &B) {
+    v128 Result = wasm_v128_or(v128(A), v128(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator^(const u32x4 &A, const u32x4 &B) {
+    v128 Result = wasm_v128_xor(v128(A), v128(B));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator~(const u32x4 &A) {
+    v128 Result = wasm_i32x4_neg(v128(A));
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator>>(const u32x4 &A, const u32x4 &B) {
+	u32x4 Result;
+	Result[0] = A[0] >> B[0];
+	Result[1] = A[1] >> B[1];
+	Result[2] = A[2] >> B[2];
+	Result[3] = A[3] >> B[3];
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator<<(const u32x4 &A, const u32x4 &B) {
+	u32x4 Result;
+	Result[0] = A[0] >> B[0];
+	Result[1] = A[1] >> B[1];
+	Result[2] = A[2] >> B[2];
+	Result[3] = A[3] >> B[3];
+    return (u32x4)Result;
+}
+
+MATHCALL u32x4 operator>>(const u32x4 &A, const u32 &&B) {
+    v128 Result = wasm_u32x4_shr(v128(A), B);
+    return (u32x4)Result;
+}
+MATHCALL u32x4 operator<<(const u32x4 &A, const u32 &&B) {
+    v128 Result = wasm_i32x4_shr(v128(A), B);
+    return (u32x4)Result;
+}
+
 inline void u32x4::ConditionalMove(u32x4 *A, const u32x4 &B, const u32x4 &MoveMask) {
     v128 Result = wasm_v128_bitselect(v128(B), v128(*A), v128(MoveMask));
     *A = (u32x4)Result;

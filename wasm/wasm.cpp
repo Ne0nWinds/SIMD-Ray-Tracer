@@ -212,7 +212,7 @@ static EM_BOOL KeyCallbackFunction(int EventType, const EmscriptenKeyboardEvent 
 	// }
 	u32 EventCodeHash = KeyCodeHash(Event->code);
 
-	key Key;
+	key Key = key::None;
     switch (EventCodeHash) {
         case KeyCodeHash("Escape"): {
             Key = key::Escape;

@@ -283,7 +283,7 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
                 u32 Index = f32x::HorizontalMinIndex(MinT);
                 if (MinT[Index] == F32Max) break;
 
-                const u32 AbsoluteIndex = MaterialIndex[Index] * 8 + Index + 1;
+                const u32 AbsoluteIndex = MaterialIndex[Index] * SIMD_WIDTH + Index + 1;
                 const material &Material = Materials[AbsoluteIndex];
 
                 OutputColor += Material.Emissive * Attenuation;

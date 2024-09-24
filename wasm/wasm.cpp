@@ -2,8 +2,10 @@
 
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
+#include <emscripten/wasm_worker.h>
 #include <webgl/webgl1.h>
 #include <stdio.h>
+#include <atomic>
 
 static memory_arena Temp;
 
@@ -26,7 +28,7 @@ memory_arena AllocateArenaFromOS(u32 Size, u64 StartingAddress) {
 
     memory_arena Result = {0};
 
-    u32 CommitSize = RoundUpPowerOf2(Size, (u32)AllocationGranularity);
+    u32 CommitSize = RoundUpPowerOf2(Size, AllocationGranularity);
 
     Result.Start = malloc(CommitSize);
     Result.Size = CommitSize;
@@ -66,8 +68,7 @@ void memory_arena::Reset() {
 }
 
 u32 GetProcessorThreadCount() {
-    // return NumberOfProcessors;
-	return 1;
+    return NumberOfProcessors;
 }
 
 static void InitializeWebGL() {
@@ -152,11 +153,7 @@ static void InitializeWebGL() {
 	emscripten_glUseProgram(GLProgram);
 }
 static void InitOSProperties() {
-	NumberOfProcessors = EM_ASM_INT({
-		return navigator.hardwareConcurrency;
-	});
-
-
+	NumberOfProcessors = emscripten_navigator_hardware_concurrency();
 	Temp = AllocateArenaFromOS(MB(256));
 }
 
@@ -555,22 +552,42 @@ bool IsUp(key Key) {
     return Result;
 }
 
-struct thread_function_data;
-
 struct wasm_work_queue_data {
 	u32 WorkIndex;
 	u32 WorkCompleted;
 	u32 WorkItemCount;
 
-	u32 ThreadCount;
 	thread_callback ThreadCallback;
+	u32 ThreadCount;
+	emscripten_wasm_worker_t *ThreadHandles;
+	emscripten_semaphore_t Semaphore;
 };
 
-void work_queue::Create(memory_arena *Arena, thread_callback ThreadCallback, u32 Count) {
-	wasm_work_queue_data *WorkQueueData = 0;
-	WorkQueueData = (wasm_work_queue_data *)Arena->Push(sizeof(wasm_work_queue_data));
+void ThreadFunction(s32 CtxPointer, s32 ThreadIndex) {
 
-	u32 ThreadCount = 1;
+	wasm_work_queue_data *Context = (wasm_work_queue_data *)((void *)CtxPointer);
+
+	for (;;) {
+		emscripten_wasm_worker_sleep(1000 * 16);
+	}
+
+	return;
+}
+
+void work_queue::Create(memory_arena *Arena, thread_callback ThreadCallback, u32 Count) {
+
+	wasm_work_queue_data *WorkQueueData = (wasm_work_queue_data *)Arena->Push(sizeof(wasm_work_queue_data));
+
+	const u32 ThreadCount = Count;
+	emscripten_semaphore_init(&WorkQueueData->Semaphore, ThreadCount);
+	WorkQueueData->ThreadHandles = (emscripten_wasm_worker_t *)Arena->Push(sizeof(emscripten_wasm_worker_t) * ThreadCount);
+
+	for (u32 i = 0; i < ThreadCount; ++i) {
+		u32 ThreadIndex = i;
+		u32 ThreadHandle = emscripten_malloc_wasm_worker(KB(32));
+		WorkQueueData->ThreadHandles[i] = ThreadHandle;
+		emscripten_wasm_worker_post_function_vii(ThreadHandle, &ThreadFunction, (u32)WorkQueueData, ThreadIndex);
+	}
 
 	WorkQueueData->ThreadCallback = ThreadCallback;
 	WorkQueueData->WorkIndex = 0;

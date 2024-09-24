@@ -42,7 +42,8 @@ void *memory_arena::Push(u64 Size, u32 Alignment) {
     Assert(PopCount(Alignment) == 1);
 
     u8 *AlignedOffset = (u8 *)this->Offset;
-    AlignedOffset = (u8 *)RoundUpPowerOf2((u64)AlignedOffset, (u64)Alignment);
+    AlignedOffset = (u8 *)RoundUpPowerOf2((u32)AlignedOffset, (u32)Alignment);
+	Assert(((u32)AlignedOffset & (Alignment - 1)) == 0);
 
     u8 *NewOffset = AlignedOffset + Size;
     Assert((u64)NewOffset - (u64)this->Start < this->Size);
@@ -563,12 +564,33 @@ struct wasm_work_queue_data {
 	emscripten_semaphore_t Semaphore;
 };
 
+#if 0
+void DebugThreadStart(int arg1, int arg2) {
+	emscripten_log(EM_LOG_CONSOLE, "Start Thread: %d\n", arg1);
+}
+void DebugSemaphoreRelease(int arg1, int arg2) {
+	emscripten_log(EM_LOG_CONSOLE, "Semaphore Released!");
+}
+#endif
+
 void ThreadFunction(s32 CtxPointer, s32 ThreadIndex) {
 
 	wasm_work_queue_data *Context = (wasm_work_queue_data *)((void *)CtxPointer);
 
 	for (;;) {
-		emscripten_wasm_worker_sleep(1000 * 16);
+		u32 WorkEntry = emscripten_atomic_add_u32(&Context->WorkIndex, 1);
+		bool Continue = WorkEntry < Context->WorkItemCount;
+
+		if (Continue) {
+			work_queue_context ThreadCallbackContext = {
+				.WorkEntry = WorkEntry,
+				.ThreadIndex = (u32)ThreadIndex
+			};
+			Context->ThreadCallback(&ThreadCallbackContext);
+			emscripten_atomic_add_u32(&Context->WorkCompleted, 1);
+		} else {
+			emscripten_semaphore_waitinf_acquire(&Context->Semaphore, 1);
+		}
 	}
 
 	return;
@@ -578,21 +600,27 @@ void work_queue::Create(memory_arena *Arena, thread_callback ThreadCallback, u32
 
 	wasm_work_queue_data *WorkQueueData = (wasm_work_queue_data *)Arena->Push(sizeof(wasm_work_queue_data));
 
-	const u32 ThreadCount = Count;
-	emscripten_semaphore_init(&WorkQueueData->Semaphore, ThreadCount);
-	WorkQueueData->ThreadHandles = (emscripten_wasm_worker_t *)Arena->Push(sizeof(emscripten_wasm_worker_t) * ThreadCount);
+	WorkQueueData->ThreadCount = 0;
 
-	for (u32 i = 0; i < ThreadCount; ++i) {
-		u32 ThreadIndex = i;
-		u32 ThreadHandle = emscripten_malloc_wasm_worker(KB(32));
-		WorkQueueData->ThreadHandles[i] = ThreadHandle;
-		emscripten_wasm_worker_post_function_vii(ThreadHandle, &ThreadFunction, (u32)WorkQueueData, ThreadIndex);
+	if (Count > 1) {
+		const u32 ThreadCount = Count - 1;
+		emscripten_semaphore_init(&WorkQueueData->Semaphore, ThreadCount);
+		emscripten_semaphore_try_acquire(&WorkQueueData->Semaphore, ThreadCount);
+		WorkQueueData->ThreadHandles = (emscripten_wasm_worker_t *)Arena->Push(sizeof(emscripten_wasm_worker_t) * ThreadCount);
+
+		for (u32 i = 0; i < ThreadCount; ++i) {
+			u32 ThreadIndex = i;
+			u32 ThreadHandle = emscripten_malloc_wasm_worker(KB(32));
+			WorkQueueData->ThreadHandles[i] = ThreadHandle;
+			emscripten_wasm_worker_post_function_vii(ThreadHandle, &ThreadFunction, (u32)WorkQueueData, ThreadIndex);
+		}
+
+		WorkQueueData->ThreadCount = ThreadCount;
 	}
 
 	WorkQueueData->ThreadCallback = ThreadCallback;
 	WorkQueueData->WorkIndex = 0;
 	WorkQueueData->WorkCompleted = 0;
-	WorkQueueData->ThreadCount = ThreadCount;
 	this->OSData = WorkQueueData;
 }
 void work_queue::Start(u32 WorkItemCount) {
@@ -600,21 +628,26 @@ void work_queue::Start(u32 WorkItemCount) {
     WorkQueueData->WorkItemCount = WorkItemCount;
     WorkQueueData->WorkIndex = 0;
     WorkQueueData->WorkCompleted = 0;
+	if (WorkQueueData->ThreadCount > 0) {
+		emscripten_semaphore_release(&WorkQueueData->Semaphore, WorkQueueData->ThreadCount);
+	}
 }
 void work_queue::Wait() {
     wasm_work_queue_data *WorkQueueData = (wasm_work_queue_data *)this->OSData;
 
-	u32 ItemCount = WorkQueueData->WorkItemCount;
-	u32 WorkEntry = WorkQueueData->WorkIndex;
+	const u32 ItemCount = WorkQueueData->WorkItemCount;
+	u32 WorkEntry = emscripten_atomic_add_u32(&WorkQueueData->WorkIndex, 1);
 	while (WorkEntry < ItemCount) {
 		work_queue_context Context = {
 			.WorkEntry = WorkEntry,
 			.ThreadIndex = 0
 		};
 		WorkQueueData->ThreadCallback(&Context);
-		WorkEntry += 1;
-		WorkQueueData->WorkCompleted += 1;
+		emscripten_atomic_add_u32(&WorkQueueData->WorkCompleted, 1);
+		WorkEntry = emscripten_atomic_add_u32(&WorkQueueData->WorkIndex, 1);
 	}
+
+	while (WorkQueueData->WorkCompleted < WorkQueueData->WorkItemCount);
 }
 
 f64 QueryTimestampInMilliseconds() {

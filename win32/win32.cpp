@@ -246,7 +246,7 @@ void work_queue::Create(memory_arena *Arena, thread_callback ThreadCallback, u32
     u32 ThreadCount = Count - 1;
     WorkQueueData->Semaphore = CreateSemaphore(NULL, ThreadCount, ThreadCount, 0);
 
-    WorkQueueData->ThreadHandles = (HANDLE *)Arena->Push(sizeof(HANDLE) * Count);
+    WorkQueueData->ThreadHandles = (HANDLE *)Arena->Push(sizeof(HANDLE) * ThreadCount);
     WorkQueueData->ThreadData = (thread_function_data *)Arena->Push(sizeof(thread_function_data) * Count);
     for (u32 i = 0; i < ThreadCount; ++i) {
         thread_function_data *Data = WorkQueueData->ThreadData + i;

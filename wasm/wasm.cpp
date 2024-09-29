@@ -647,7 +647,8 @@ void work_queue::Wait() {
 		WorkEntry = emscripten_atomic_add_u32(&WorkQueueData->WorkIndex, 1);
 	}
 
-	while (WorkQueueData->WorkCompleted < WorkQueueData->WorkItemCount);
+	volatile u32 *WorkCompleted = &WorkQueueData->WorkCompleted;
+	while (*WorkCompleted < WorkQueueData->WorkItemCount);
 }
 
 f64 QueryTimestampInMilliseconds() {

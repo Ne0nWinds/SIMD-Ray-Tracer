@@ -72,10 +72,11 @@ u32 GetProcessorThreadCount() {
     return NumberOfProcessors;
 }
 
+static constexpr char CanvasName[] = "#canvas";
+
 static void InitializeWebGL() {
 	CanvasWidth = EM_ASM_INT({ return window.innerWidth; });
 	CanvasHeight = EM_ASM_INT({ return window.innerHeight; });
-	constexpr char CanvasName[] = "#canvas";
 	emscripten_set_canvas_element_size(CanvasName, CanvasWidth, CanvasHeight);
 
 	EmscriptenWebGLContextAttributes Attributes = {0};
@@ -414,7 +415,7 @@ static EM_BOOL KeyCallbackFunction(int EventType, const EmscriptenKeyboardEvent 
         case KeyCodeHash("F10"): {
             Key = key::F10;
         } break;
-        case KeyCodeHash("Pause--"): {
+        case KeyCodeHash("Pause"): {
             Key = key::Pause;
         } break;
         case KeyCodeHash("ScrollLock"): {
@@ -660,6 +661,8 @@ f64 QueryTimestampInMilliseconds() {
 static EM_BOOL WindowResizeCallback(int eventType, const EmscriptenUiEvent* uiEvent, void* userData) {
 	CanvasWidth = EM_ASM_INT({ return window.innerWidth; });
 	CanvasHeight = EM_ASM_INT({ return window.innerHeight; });
+	emscripten_set_canvas_element_size(CanvasName, CanvasWidth, CanvasHeight);
+	emscripten_glViewport(0, 0, CanvasWidth, CanvasHeight);
 	return EM_TRUE;
 }
 

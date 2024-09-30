@@ -105,12 +105,7 @@ static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * co
         }
         for (u32 j = 0; j < SIMD_WIDTH; ++j) {
             scalar_sphere Sphere = Spheres[i + j];
-            material &Material = Materials[i + j + 1];
-            Material = Sphere.Material;
-            // Material.Color = Sphere.Color;
-            // Material.Specular = Sphere.Specular;
-            // Material.Emissive = Sphere.Emissive;
-            // Material.IndexOfRefraction = Sphere.IndexOfRefraction;
+            Materials[i + j + 1] = Sphere.Material;
         }
     }
 }
@@ -154,12 +149,6 @@ static inline v4& GetPixelV4(const image &Image, u32 X, u32 Y) {
 static inline u32& GetPixel(const image &Image, u32 X, u32 Y) {
     u32 *ImageData = (u32 *)Image.Data;
     return ImageData[Y * Image.Width + X];
-#if defined(PLATFORM_WASM)
-    Y = Image.Height - Y - 1;
-    return ImageData[Y * Image.Width + X];
-#else
-    return ImageData[Y * Image.Width + X];
-#endif
 }
 
 

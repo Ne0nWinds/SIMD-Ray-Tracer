@@ -124,7 +124,7 @@ static void InitializeWebGL() {
 			v_texCoord = a_texCoord;
 		}
 	)";
-	const char* FragmentShader = R"(
+	const char *FragmentShader = R"(
 		precision mediump float;
 		varying vec2 v_texCoord;
 		uniform sampler2D u_texture;
@@ -137,7 +137,6 @@ static void InitializeWebGL() {
 
 	{
 		GLVertexShader = emscripten_glCreateShader(GL_VERTEX_SHADER);
-		GLint Length = sizeof(VertexShader) - 1;
 		emscripten_glShaderSource(GLVertexShader, 1, (const GLchar *const*)&VertexShader, NULL);
 		emscripten_glCompileShader(GLVertexShader);
 	}
@@ -204,9 +203,6 @@ static constexpr u32 KeyCodeHash(const char *Code) {
 
 static EM_BOOL KeyCallbackFunction(int EventType, const EmscriptenKeyboardEvent *Event, void *) {
 
-	// if (Event->code[0] == 'F' && Event->code[1] == '1') {
-	// 	emscripten_console_log("F1");
-	// }
 	u32 EventCodeHash = KeyCodeHash(Event->code);
 
 	key Key = key::None;
@@ -566,11 +562,8 @@ struct wasm_work_queue_data {
 };
 
 #if 0
-void DebugThreadStart(int arg1, int arg2) {
+void DebugThreadCallback(int arg1, int arg2) {
 	emscripten_log(EM_LOG_CONSOLE, "Start Thread: %d\n", arg1);
-}
-void DebugSemaphoreRelease(int arg1, int arg2) {
-	emscripten_log(EM_LOG_CONSOLE, "Semaphore Released!");
 }
 #endif
 

@@ -464,7 +464,6 @@ static void RenderTileScalar(work_queue_context *WorkQueueContext) {
 
 static memory_arena RenderData;
 static memory_arena ThreadData;
-static work_queue WorkQueue;
 
 void OnInit(init_params *Params) {
     constexpr string8 WindowTitle = u8"SIMD Ray Tracer";
@@ -477,11 +476,19 @@ void OnInit(init_params *Params) {
     ConvertScalarSpheresToSIMDSpheres(ScalarSpheres, array_len(ScalarSpheres), Spheres);
 
     RenderData = AllocateArenaFromOS(MB(256));
-    ThreadData = AllocateArenaFromOS(KB(256));
 
-    u32 ThreadCount = GetProcessorThreadCount() - 1;
-    ThreadContexts = (thread_context *)ThreadData.Push(sizeof(thread_context) * (ThreadCount + 1));
-    for (u32 i = 0; i < ThreadCount + 1; ++i) {
+#if 1
+	WorkQueueCreate(RenderTile);
+#else
+	WorkQueueCreate(RenderTileScalar, sizeof(thread_context));
+#endif
+
+    u32 ThreadCount = GetProcessorThreadCount();
+	u32 RequiredThreadDataSize = sizeof(thread_context) * ThreadCount;
+    ThreadData = AllocateArenaFromOS(RequiredThreadDataSize);
+	ThreadContexts = (thread_context *)ThreadData.Push(RequiredThreadDataSize);
+
+    for (u32 i = 0; i < ThreadCount; ++i) {
         u64 InitialSeed = 0x420247153476526ULL * (u64)i;
         InitialSeed += 0x8442885C91A5C8DULL;
         InitialSeed ^= InitialSeed >> ((7 + i) % 64);
@@ -492,13 +499,7 @@ void OnInit(init_params *Params) {
         InitialSeed ^= InitialSeed >> 13;
         u32_random_state RandomState = { InitialSeed };
         ThreadContexts[i].RandomState = RandomState;
-        // ThreadContexts[i].CameraInfo = &CameraInfo;
     }
-#if 1
-    WorkQueue.Create(&ThreadData, RenderTile, ThreadCount);
-#else
-    WorkQueue.Create(&ThreadData, RenderTileScalar, ThreadCount);
-#endif
 }
 
 
@@ -606,9 +607,9 @@ void OnRender(const image &Image) {
     CameraInfo.TilesX = TilesX;
 
     u32 WorkItemCount = TilesX * TilesY;
-    WorkQueue.Start(WorkItemCount);
+    WorkQueueStart(WorkItemCount);
     
-    WorkQueue.Wait();
+    WorkQueueWaitUntilCompletion();
 
     PreviousRayCount += 1;
     f64 EndTime = QueryTimestampInMilliseconds();

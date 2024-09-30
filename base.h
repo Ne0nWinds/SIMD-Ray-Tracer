@@ -165,14 +165,12 @@ struct work_queue_context {
 typedef void (*thread_callback)(work_queue_context *);
 
 u32 GetProcessorThreadCount();
+void WorkQueueCreate(thread_callback ThreadCallback);
+void WorkQueueStart(u32 WorkItemCount);
+void WorkQueueWaitUntilCompletion();
 
-struct work_queue {
-    void *OSData;
-
-    void Create(memory_arena *Arena, thread_callback ThreadCallback, u32 Count);
-    void Start(u32 WorkItemCount);
-    void Wait();
-};
+bool WorkQueueReady();
+bool WorkQueueHasCompleted();
 
 enum class key : u32 {
 	None = 0x0,

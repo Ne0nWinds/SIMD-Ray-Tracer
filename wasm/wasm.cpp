@@ -74,9 +74,17 @@ u32 GetProcessorThreadCount() {
 
 static constexpr char CanvasName[] = "#canvas";
 
+static void CalculateCanvasWidthAndHeight() {
+	u32 WindowWidth = (u32)EM_ASM_INT({ return window.innerWidth; });
+	u32 WindowHeight = (u32)EM_ASM_INT({ return window.innerHeight; });
+	f64 DevicePixelRatio = EM_ASM_DOUBLE({ return window.devicePixelRatio; });
+	constexpr f64 RenderScale = 0.5;
+	CanvasWidth = WindowWidth * DevicePixelRatio * RenderScale;
+	CanvasHeight = WindowHeight * DevicePixelRatio * RenderScale;
+}
+
 static void InitializeWebGL() {
-	CanvasWidth = EM_ASM_INT({ return window.innerWidth; });
-	CanvasHeight = EM_ASM_INT({ return window.innerHeight; });
+	CalculateCanvasWidthAndHeight();
 	emscripten_set_canvas_element_size(CanvasName, CanvasWidth, CanvasHeight);
 
 	EmscriptenWebGLContextAttributes Attributes = {0};
@@ -85,6 +93,8 @@ static void InitializeWebGL() {
 	Attributes.antialias = EM_FALSE;
 	WebGLContext = emscripten_webgl_create_context(CanvasName, &Attributes);
 	emscripten_webgl_make_context_current(WebGLContext);
+
+	emscripten_glViewport(0, 0, CanvasWidth, CanvasHeight);
 
 	emscripten_glClearColor(0,0,0,1);
 	emscripten_glClear(GL_COLOR_BUFFER_BIT);
@@ -645,8 +655,7 @@ f64 QueryTimestampInMilliseconds() {
 }
 
 static EM_BOOL WindowResizeCallback(int eventType, const EmscriptenUiEvent* uiEvent, void* userData) {
-	CanvasWidth = EM_ASM_INT({ return window.innerWidth; });
-	CanvasHeight = EM_ASM_INT({ return window.innerHeight; });
+	CalculateCanvasWidthAndHeight();
 	emscripten_set_canvas_element_size(CanvasName, CanvasWidth, CanvasHeight);
 	emscripten_glViewport(0, 0, CanvasWidth, CanvasHeight);
 	return EM_TRUE;

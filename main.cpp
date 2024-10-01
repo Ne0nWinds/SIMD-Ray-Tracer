@@ -1,7 +1,6 @@
 
 #include "base.h"
 
-static v3 CameraPosition;
 static u32 PreviousRayCount = 0;
 static constexpr u32 TileSize = 32;
 
@@ -120,7 +119,7 @@ struct camera_info {
     f32 FilmH;
     u32 TilesX;
 
-    image Image;
+    image CurrentImage;
     image PreviousImage;
 };
 
@@ -192,7 +191,7 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
 
     u32_random_state &RandomState = ThreadContexts[WorkQueueContext->ThreadIndex].RandomState;
 
-    const image &Image = CameraInfo.Image; 
+    const image &CurrentImage = CameraInfo.CurrentImage;
     const image &PreviousImage = CameraInfo.PreviousImage; 
     const v3 &FilmCenter = CameraInfo.FilmCenter;
     const v3 &FilmW = CameraInfo.FilmW;
@@ -206,8 +205,8 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
     u32 TileY = Tile / CameraInfo.TilesX;
     u32 TileTop = TileY * TileSize;
     u32 TileLeft = TileX * TileSize;
-    u32 TileBottom = TileTop + Min(TileSize, Image.Height - TileTop);
-    u32 TileRight = TileLeft + Min(TileSize, Image.Width - TileLeft);
+    u32 TileBottom = TileTop + Min(TileSize, CurrentImage.Height - TileTop);
+    u32 TileRight = TileLeft + Min(TileSize, CurrentImage.Width - TileLeft);
 
     for (u32 y = TileTop; y < TileBottom; ++y) {
         for (u32 x = TileLeft; x < TileRight; ++x) {
@@ -217,11 +216,11 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
 
             f32 JitterX = RandomState.RandomFloat(-0.5f, 0.5f);
             f32 JitterY = RandomState.RandomFloat(-0.5f, 0.5f);
-            f32 FilmX = -1.0f + ((x + JitterX) * 2.0f) / (f32)Image.Width;
-            f32 FilmY = -1.0f + ((y + JitterY) * 2.0f) / (f32)Image.Height;
+            f32 FilmX = -1.0f + ((x + JitterX) * 2.0f) / (f32)CurrentImage.Width;
+            f32 FilmY = -1.0f + ((y + JitterY) * 2.0f) / (f32)CurrentImage.Height;
 
             v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
-            v3 RayOrigin = CameraPosition;
+            v3 RayOrigin = CameraInfo.CameraPosition;
             v3 RayDirection = v3::Normalize(FilmP - RayOrigin);
 
             u32 MaxRayBounce = 5;
@@ -320,7 +319,7 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
             FinalColor.w = 1.0f;
             PreviousColor = FinalColor;
 
-            u32 &Pixel = GetPixel(Image, x, y);
+            u32 &Pixel = GetPixel(CurrentImage, x, y);
             Pixel = ColorFromV4(LinearToSRGB(FinalColor));
         }
     }
@@ -330,7 +329,7 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
 static void RenderTileScalar(work_queue_context *WorkQueueContext) {
     u32_random_state &RandomState = ThreadContexts[WorkQueueContext->ThreadIndex].RandomState;
 
-    const image &Image = CameraInfo.Image;
+    const image &CurrentImage = CameraInfo.CurrentImage;
     const image &PreviousImage = CameraInfo.PreviousImage;
     const v3 &FilmCenter = CameraInfo.FilmCenter;
     const v3 &FilmW = CameraInfo.FilmW;
@@ -344,8 +343,8 @@ static void RenderTileScalar(work_queue_context *WorkQueueContext) {
     u32 TileY = Tile / CameraInfo.TilesX;
     u32 TileTop = TileY * TileSize;
     u32 TileLeft = TileX * TileSize;
-    u32 TileBottom = TileTop + Min(TileSize, Image.Height - TileTop);
-    u32 TileRight = TileLeft + Min(TileSize, Image.Width - TileLeft);
+    u32 TileBottom = TileTop + Min(TileSize, CurrentImage.Height - TileTop);
+    u32 TileRight = TileLeft + Min(TileSize, CurrentImage.Width - TileLeft);
 
     for (u32 y = TileTop; y < TileBottom; ++y) {
         for (u32 x = TileLeft; x < TileRight; ++x) {
@@ -355,11 +354,11 @@ static void RenderTileScalar(work_queue_context *WorkQueueContext) {
 
             f32 JitterX = RandomState.RandomFloat(-0.5f, 0.5f);
             f32 JitterY = RandomState.RandomFloat(-0.5f, 0.5f);
-            f32 FilmX = -1.0f + ((x + JitterX) * 2.0f) / (f32)Image.Width;
-            f32 FilmY = -1.0f + ((y + JitterY) * 2.0f) / (f32)Image.Height;
+            f32 FilmX = -1.0f + ((x + JitterX) * 2.0f) / (f32)CurrentImage.Width;
+            f32 FilmY = -1.0f + ((y + JitterY) * 2.0f) / (f32)CurrentImage.Height;
 
             v3 FilmP = FilmCenter + (FilmX * FilmW * 0.5f * CameraX) + (FilmY * FilmH * 0.5f * CameraY);
-            v3 RayOrigin = CameraPosition;
+            v3 RayOrigin = CameraInfo.CameraPosition;
             v3 RayDirection = v3::Normalize(FilmP - RayOrigin);
 
             u32 MaxRayBounce = 5;
@@ -456,7 +455,7 @@ static void RenderTileScalar(work_queue_context *WorkQueueContext) {
             FinalColor.w = 1.0f;
             PreviousColor = FinalColor;
 
-            u32 &Pixel = GetPixel(Image, x, y);
+            u32 &Pixel = GetPixel(CurrentImage, x, y);
             Pixel = ColorFromV4(LinearToSRGB(FinalColor));
         }
     }
@@ -475,12 +474,12 @@ void OnInit(init_params *Params) {
     InitScalarSpheres(ScalarSpheres);
     ConvertScalarSpheresToSIMDSpheres(ScalarSpheres, array_len(ScalarSpheres), Spheres);
 
-    RenderData = AllocateArenaFromOS(MB(256));
+    RenderData = AllocateArenaFromOS(MB(512));
 
 #if 1
 	WorkQueueCreate(RenderTile);
 #else
-	WorkQueueCreate(RenderTileScalar, sizeof(thread_context));
+	WorkQueueCreate(RenderTileScalar);
 #endif
 
     u32 ThreadCount = GetProcessorThreadCount();
@@ -503,15 +502,32 @@ void OnInit(init_params *Params) {
 }
 
 
+static image CurrentImage = {};
 static image PreviousImage = {};
 
-void OnRender(const image &Image) {
+static inline void CopyImage(image DstImage, image SrcImage) {
+	Assert(DstImage.Width == SrcImage.Width);
+	Assert(DstImage.Height == SrcImage.Height);
+	u32 Length = DstImage.Width * DstImage.Height;
+	u32 *Dst = (u32 *)DstImage.Data;
+	u32 *Src = (u32 *)SrcImage.Data;
+	for (u32 i = 0; i < Length; ++i) {
+		Dst[i] = Src[i];
+	}
+}
+
+bool OnRender(const image &Image) {
+
+	if (!WorkQueueIsReady()) {
+		return false;
+	}
 
     v3 LookAt = v3(Spheres[0].Positions[1]);
 
     static f32 DistanceFromLookAt = 1.0f;
     static f32 XAngle = PI32 / 3.0;
     static f32 YHeight = 0.0f;
+	static v3 CameraPosition;
 
     bool Moved = false;
     {
@@ -567,15 +583,42 @@ void OnRender(const image &Image) {
         CameraPosition += LookAt;
     }
 
-    if (Image.Width != PreviousImage.Width || Image.Height != PreviousImage.Height || Moved || IsDown(key::R)) {
+	bool WorkQueueComplete = WorkQueueHasCompleted();
+	bool Resize = Image.Width != PreviousImage.Width || Image.Height != PreviousImage.Height;
+	bool CopyToOutput = WorkQueueComplete && !Resize;
+	static f64 StartTime;
+
+	if (CopyToOutput) {
+		CopyImage(Image, CurrentImage);
+	}
+
+    if (Resize || Moved || IsDown(key::R)) {
+		WorkQueueWaitUntilCompletion();
+		if (!Resize) {
+			CopyImage(Image, CurrentImage);
+			CopyToOutput = true;
+		}
         PreviousRayCount = 0;
         RenderData.Reset();
         PreviousImage.Width = Image.Width;
         PreviousImage.Height = Image.Height;
-        PreviousImage.Data = (v4 *)RenderData.Push(Image.Width * Image.Height * sizeof(v4));
-    }
+        PreviousImage.Data = RenderData.Push(Image.Width * Image.Height * sizeof(v4));
+        CurrentImage.Width = Image.Width;
+        CurrentImage.Height = Image.Height;
+        CurrentImage.Data = RenderData.Push(Image.Width * Image.Height * sizeof(u32));
+    } else if (WorkQueueComplete) {
+		PreviousRayCount += 1;
+#if 0
+		f64 EndTime = QueryTimestampInMilliseconds();
+		volatile f64 TimeElapsed = EndTime - StartTime;
+		emscripten_log(EM_LOG_CONSOLE, "%.3f", (f32)TimeElapsed);
+		(void)TimeElapsed;
+#endif
+	} else {
+		return false;
+	}
 
-    f64 StartTime = QueryTimestampInMilliseconds();
+    // StartTime = QueryTimestampInMilliseconds();
 
     v3 CameraZ = v3::Normalize(CameraPosition - LookAt);
     v3 CameraX = v3::Normalize(v3::Cross(v3(0.0f, 1.0f, 0.0f), CameraZ));
@@ -601,19 +644,13 @@ void OnRender(const image &Image) {
     CameraInfo.FilmCenter = FilmCenter;
     CameraInfo.FilmW = FilmW;
     CameraInfo.FilmH = FilmH;
-    CameraInfo.Image = Image;
+    CameraInfo.CurrentImage = CurrentImage;
     CameraInfo.PreviousImage = PreviousImage;
     CameraInfo.CameraPosition = CameraPosition;
     CameraInfo.TilesX = TilesX;
 
     u32 WorkItemCount = TilesX * TilesY;
     WorkQueueStart(WorkItemCount);
-    
-    WorkQueueWaitUntilCompletion();
 
-    PreviousRayCount += 1;
-    f64 EndTime = QueryTimestampInMilliseconds();
-    volatile f64 TimeElapsed = EndTime - StartTime;
-    // emscripten_log(EM_LOG_CONSOLE, "%.3f", (f32)TimeElapsed);
-    (void)TimeElapsed;
+	return CopyToOutput;
 }

@@ -28,10 +28,8 @@ memory_arena AllocateArenaFromOS(u32 Size, u64 StartingAddress) {
 
     memory_arena Result = {0};
 
-    u32 CommitSize = RoundUpPowerOf2(Size, AllocationGranularity);
-
-    Result.Start = malloc(CommitSize);
-    Result.Size = CommitSize;
+    Result.Start = malloc(Size);
+    Result.Size = Size;
     Result.Offset = Result.Start;
 
     Assert(Result.Start != NULL);
@@ -46,8 +44,10 @@ void *memory_arena::Push(u64 Size, u32 Alignment) {
 	Assert(((u32)AlignedOffset & (Alignment - 1)) == 0);
 
     u8 *NewOffset = AlignedOffset + Size;
-    Assert((u64)NewOffset - (u64)this->Start < this->Size);
+    Assert((u64)NewOffset - (u64)this->Start <= this->Size);
     this->Offset = (void *)NewOffset;
+
+	memset(AlignedOffset, 0, Size);
 
     return AlignedOffset;
 }
@@ -78,7 +78,7 @@ static void CalculateCanvasWidthAndHeight() {
 	u32 WindowWidth = (u32)EM_ASM_INT({ return window.innerWidth; });
 	u32 WindowHeight = (u32)EM_ASM_INT({ return window.innerHeight; });
 	f64 DevicePixelRatio = EM_ASM_DOUBLE({ return window.devicePixelRatio; });
-	constexpr f64 RenderScale = 0.5;
+	constexpr f64 RenderScale = 0.75;
 	CanvasWidth = WindowWidth * DevicePixelRatio * RenderScale;
 	CanvasHeight = WindowHeight * DevicePixelRatio * RenderScale;
 }
@@ -172,13 +172,16 @@ static EM_BOOL RequestAnimationFrameCallback(double time, void *) {
 
 	memory_arena Scratch = Temp.CreateScratch();
 	image Image = CreateImage(&Scratch, CanvasWidth, CanvasHeight, format::R8G8B8A8_U32);
-	OnRender(Image);
+	memset(Image.Data, 0, Image.Width * Image.Height * sizeof(u32));
+	bool ShouldUpdateOutput = OnRender(Image);
 
 	// emscripten_glBindTexture(GL_TEXTURE_2D, GLTextureHandle);
-	emscripten_glClear(GL_COLOR_BUFFER_BIT);
-	emscripten_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Image.Width, Image.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Image.Data);
-	emscripten_glActiveTexture(GL_TEXTURE0);
-	emscripten_glDrawArrays(GL_TRIANGLES, 0, 6);
+	if (ShouldUpdateOutput) {
+		emscripten_glClear(GL_COLOR_BUFFER_BIT);
+		emscripten_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Image.Width, Image.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Image.Data);
+		emscripten_glActiveTexture(GL_TEXTURE0);
+		emscripten_glDrawArrays(GL_TRIANGLES, 0, 6);
+	}
 
 	return EM_TRUE;
 }
@@ -608,9 +611,9 @@ void WorkQueueCreate(thread_callback ThreadCallback) {
 	// I don't care about using malloc here, because this never gets freed
 	WorkQueueData.ThreadHandles = (emscripten_wasm_worker_t *)malloc(sizeof(emscripten_wasm_worker_t) * NumberOfProcessors);
 
-	for (u32 ThreadIndex = 1; ThreadIndex < NumberOfProcessors; ++ThreadIndex) {
+	for (u32 ThreadIndex = 0; ThreadIndex < NumberOfProcessors; ++ThreadIndex) {
 		u32 ThreadHandle = emscripten_malloc_wasm_worker(KB(32));
-		WorkQueueData.ThreadHandles[ThreadIndex - 1] = ThreadHandle;
+		WorkQueueData.ThreadHandles[ThreadIndex] = ThreadHandle;
 		emscripten_wasm_worker_post_function_vi(ThreadHandle, &ThreadFunction, ThreadIndex);
 	}
 
@@ -625,27 +628,21 @@ void WorkQueueStart(u32 WorkItemCount) {
     WorkQueueData.WorkCompleted = 0;
 	emscripten_atomic_fence();
 
-	u32 ThreadsReady = WorkQueueData.ThreadsReady;
-	if (ThreadsReady > 0) {
-		emscripten_semaphore_release(&WorkQueueData.Semaphore, ThreadsReady);
-	}
+	u32 ThreadsReady = *(volatile u32 *)&WorkQueueData.ThreadsReady;
+	emscripten_semaphore_release(&WorkQueueData.Semaphore, ThreadsReady);
 }
 void WorkQueueWaitUntilCompletion() {
-
-	const u32 ItemCount = WorkQueueData.WorkItemCount;
-	u32 WorkEntry = emscripten_atomic_add_u32(&WorkQueueData.WorkIndex, 1);
-	while (WorkEntry < ItemCount) {
-		work_queue_context Context = {
-			.WorkEntry = WorkEntry,
-			.ThreadIndex = 0
-		};
-		WorkQueueData.ThreadCallback(&Context);
-		emscripten_atomic_add_u32(&WorkQueueData.WorkCompleted, 1);
-		WorkEntry = emscripten_atomic_add_u32(&WorkQueueData.WorkIndex, 1);
-	}
-
 	volatile u32 *WorkCompleted = &WorkQueueData.WorkCompleted;
 	while (*WorkCompleted < WorkQueueData.WorkItemCount);
+}
+bool WorkQueueIsReady() {
+	u32 ThreadsReady = *(volatile u32 *)&WorkQueueData.ThreadsReady;
+	return ThreadsReady > 0;
+}
+
+bool WorkQueueHasCompleted() {
+	u32 WorkCompleted = *(volatile u32 *)&WorkQueueData.WorkCompleted;
+	return WorkCompleted >= WorkQueueData.WorkItemCount;
 }
 
 f64 QueryTimestampInMilliseconds() {

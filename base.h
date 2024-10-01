@@ -155,8 +155,7 @@ struct init_params {
 };
 
 void OnInit(init_params *Params);
-void OnRender(const image &Image);
-
+bool OnRender(const image &Image);
 
 struct work_queue_context {
     u32 WorkEntry;
@@ -168,8 +167,7 @@ u32 GetProcessorThreadCount();
 void WorkQueueCreate(thread_callback ThreadCallback);
 void WorkQueueStart(u32 WorkItemCount);
 void WorkQueueWaitUntilCompletion();
-
-bool WorkQueueReady();
+bool WorkQueueIsReady();
 bool WorkQueueHasCompleted();
 
 enum class key : u32 {

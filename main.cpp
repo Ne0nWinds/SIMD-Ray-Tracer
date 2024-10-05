@@ -2,7 +2,7 @@
 #include "base.h"
 
 static u32 PreviousRayCount = 0;
-static constexpr u32 TileSize = 32;
+static constexpr u32 TileSize = 128;
 
 struct material {
     v3 Color;
@@ -53,9 +53,9 @@ static constexpr inline void InitScalarSpheres(scalar_sphere *SpheresArray) {
     constexpr u32 Length = array_len(ScalarSpheres);
     for (u32 i = 0; i < Length; ++i) {
         v3 Position = 0.0f;
-        Position.x = RandomState.RandomFloat(-48.0f, 48.0f);
-        Position.y = RandomState.RandomFloat(-48.0f, 48.0f);
-        Position.z = RandomState.RandomFloat(-48.0f, 48.0f);
+        Position.x = RandomState.RandomFloat(-36.0f, 36.0f);
+        Position.y = RandomState.RandomFloat(-36.0f, 36.0f);
+        Position.z = RandomState.RandomFloat(-36.0f, 36.0f);
 
         f32 Radius = RandomState.RandomFloat(0.25f, 5.0f);
 
@@ -516,15 +516,15 @@ static inline void CopyImage(image DstImage, image SrcImage) {
 	}
 }
 
-bool OnRender(const image &Image) {
+bool OnRender(const image &Image, render_params RenderParams) {
 
 	if (!WorkQueueIsReady()) {
 		return false;
 	}
 
-    v3 LookAt = v3(Spheres[0].Positions[1]);
+    v3 LookAt = v3(Spheres[3].Positions[1]);
 
-    static f32 DistanceFromLookAt = 1.0f;
+    static f32 DistanceFromLookAt = 2.0f;
     static f32 XAngle = PI32 / 3.0;
     static f32 YHeight = 0.0f;
 	static v3 CameraPosition;
@@ -608,17 +608,9 @@ bool OnRender(const image &Image) {
         CurrentImage.Data = RenderData.Push(Image.Width * Image.Height * sizeof(u32));
     } else if (WorkQueueComplete) {
 		PreviousRayCount += 1;
-#if 0
-		f64 EndTime = QueryTimestampInMilliseconds();
-		volatile f64 TimeElapsed = EndTime - StartTime;
-		emscripten_log(EM_LOG_CONSOLE, "%.3f", (f32)TimeElapsed);
-		(void)TimeElapsed;
-#endif
 	} else {
 		return false;
 	}
-
-    // StartTime = QueryTimestampInMilliseconds();
 
     v3 CameraZ = v3::Normalize(CameraPosition - LookAt);
     v3 CameraX = v3::Normalize(v3::Cross(v3(0.0f, 1.0f, 0.0f), CameraZ));
@@ -650,7 +642,7 @@ bool OnRender(const image &Image) {
     CameraInfo.TilesX = TilesX;
 
     u32 WorkItemCount = TilesX * TilesY;
-    WorkQueueStart(WorkItemCount);
+    WorkQueueStart(WorkItemCount, RenderParams.ThreadCount);
 
 	return CopyToOutput;
 }

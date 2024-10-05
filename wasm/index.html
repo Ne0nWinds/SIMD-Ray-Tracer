@@ -19,7 +19,7 @@
 			height: 100%;
 			display: flex;
 			font-family: Helvetica, Arial, sans-serif;
-			font-size: 16px;
+			font-size: 20px;
 		}
 		#canvas {
 			width: 100%;
@@ -32,6 +32,8 @@
 		#controls {
 			background-color: #111;
 			color: #FFF;
+			min-width: 20rem;
+			max-width: 20rem;
 		}
 		.controls_section h2 {
 			margin: 0.75rem 0.5rem;
@@ -166,7 +168,7 @@
 		<div class="controls_section">
 			<h2>Stats</h2>
 			<p>Resolution: <span id="stats_render_width"></span>x<span id="stats_render_height"></span></p>
-			<p>Total Render Time: <span id="stats_total_render_time"></span>ms</p>
+			<p>Render Time (w/ V-Sync): <span id="stats_total_render_time"></span>ms</p>
 			<p>Rays Cast: <span id="stats_rays_cast"></span></p>
 			<p>Avg Time Per Ray Cast: <span id="stats_avg_time_per_ray_cast"></span>ns<p>
 		</div>

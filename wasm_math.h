@@ -51,6 +51,11 @@ static inline f32 Max(f32 A, f32 B) {
 static inline f32 Min(f32 A, f32 B) {
     return __builtin_wasm_min_f32(A, B);
 }
+MATHCALL u32 Min(u32 a, u32 b) {
+	u32 DOZ = (a - b) & -(a >= b);
+	u32 Result = a - DOZ;
+	return Result;
+}
 MATHCALL f32 Negate(f32 Value) {
     return Value * -1.0f; // f32.neg
 }

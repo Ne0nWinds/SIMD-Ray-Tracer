@@ -154,8 +154,13 @@ struct init_params {
     string8 WindowTitle;
 };
 
+struct render_params {
+	u32 ThreadCount;
+	bool EnableSIMD;
+};
+
 void OnInit(init_params *Params);
-bool OnRender(const image &Image);
+bool OnRender(const image &Image, render_params RenderParams);
 
 struct work_queue_context {
     u32 WorkEntry;
@@ -165,7 +170,7 @@ typedef void (*thread_callback)(work_queue_context *);
 
 u32 GetProcessorThreadCount();
 void WorkQueueCreate(thread_callback ThreadCallback);
-void WorkQueueStart(u32 WorkItemCount);
+void WorkQueueStart(u32 WorkItemCount, u32 ThreadCount);
 void WorkQueueWaitUntilCompletion();
 bool WorkQueueIsReady();
 bool WorkQueueHasCompleted();

@@ -12,7 +12,10 @@ static memory_arena Temp;
 static u32 CanvasWidth, CanvasHeight;
 static EMSCRIPTEN_WEBGL_CONTEXT_HANDLE WebGLContext;
 static constexpr u32 AllocationGranularity = KB(64); // Size of WASM virtual page
+													 //
 static u64 NumberOfProcessors;
+static u32 ActiveThreadCount = 1;
+static u32 PreviousThreadCountValue = 1;
 
 static u32 GLTextureHandle;
 static u32 GLVertexBufferHandle;
@@ -171,13 +174,32 @@ static void InitOSProperties() {
 	Temp = AllocateArenaFromOS(MB(256));
 }
 
-static EM_BOOL RequestAnimationFrameCallback(double time, void *) {
+
+static EM_BOOL RequestAnimationFrameCallback(double Time, void *) {
 
 	memory_arena Scratch = Temp.CreateScratch();
 	image Image = CreateImage(&Scratch, CanvasWidth, CanvasHeight, format::R8G8B8A8_U32);
-	bool ShouldUpdateOutput = OnRender(Image);
+	render_params RenderParams = {
+		.ThreadCount = ActiveThreadCount
+	};
+	static bool ShouldStartMeasurement = true;
+	static f64 StartTime = 0;
+
+	if (ShouldStartMeasurement) {
+		StartTime = QueryTimestampInMilliseconds();
+		ShouldStartMeasurement = false;
+	}
+	bool ShouldUpdateOutput = OnRender(Image, RenderParams);
 
 	if (ShouldUpdateOutput) {
+		f64 EndTime = QueryTimestampInMilliseconds();
+		f64 TimeElapsed = EndTime - StartTime;
+		ShouldStartMeasurement = true;
+		EM_ASM({
+			const totalRenderTime = document.getElementById("stats_total_render_time");
+			totalRenderTime.innerText = ($0).toFixed(3);
+		}, TimeElapsed);
+
 		// emscripten_glBindTexture(GL_TEXTURE_2D, GLTextureHandle);
 		emscripten_glClear(GL_COLOR_BUFFER_BIT);
 		emscripten_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Image.Width, Image.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Image.Data);
@@ -627,14 +649,14 @@ void WorkQueueCreate(thread_callback ThreadCallback) {
 	WorkQueueData.WorkIndex = 0;
 	WorkQueueData.WorkCompleted = 0;
 }
-void WorkQueueStart(u32 WorkItemCount) {
+void WorkQueueStart(u32 WorkItemCount, u32 ThreadCount) {
     WorkQueueData.WorkItemCount = WorkItemCount;
     WorkQueueData.WorkIndex = 0;
     WorkQueueData.WorkCompleted = 0;
 	emscripten_atomic_fence();
 
 	u32 ThreadsReady = *(volatile u32 *)&WorkQueueData.ThreadsReady;
-	emscripten_semaphore_release(&WorkQueueData.Semaphore, ThreadsReady);
+	emscripten_semaphore_release(&WorkQueueData.Semaphore, Min(ThreadsReady, ThreadCount));
 }
 void WorkQueueWaitUntilCompletion() {
 	volatile u32 *WorkCompleted = &WorkQueueData.WorkCompleted;
@@ -660,9 +682,6 @@ static EM_BOOL WindowResizeCallback(int EventType, const EmscriptenUiEvent* uiEv
 	CalculateCanvasWidthAndHeight();
 	return EM_TRUE;
 }
-
-static u32 ActiveThreadCount = 1;
-static u32 PreviousThreadCountValue = 1;
 
 static void UpdateMultithreadUIValues() {
 	EM_ASM({
@@ -756,6 +775,7 @@ int main() {
 				enableMTElement.checked = newValue > 1;
 				threadCountValueElement.value = newValue;
 				HEAP32[$0 >> 2] = newValue;
+				HEAP32[$1 >> 2] = newValue;
 			};
 			enableMTElement.onchange = (e) => {
 				const checked = e.target.checked;
@@ -779,7 +799,6 @@ int main() {
 				HEAPF64[$2 >> 3] = newRenderScale;
 			}
 		}, &ActiveThreadCount, &PreviousThreadCountValue, &RenderScale);
-		emscripten_log(EM_LOG_CONSOLE, "%.3f", (f32)RenderScale);
 	}
 	CalculateCanvasWidthAndHeight();
 }

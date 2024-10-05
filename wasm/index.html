@@ -2,30 +2,178 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin" />
     <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp" />
     <title>SIMD Ray Tracer</title>
-    <script src="wasm_glue.js" defer></script>
+	<script src="wasm_glue.js" defer></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-        }
-        html, body {
-            width: 100%;
-            height: 100%;
-            overflow-y: hidden;
-        }
-        #canvas {
-            display: block;
-            touch-action: none;
+		* {
+			margin: 0;
+			padding: 0;
+			outline: 0;
+			border: 0;
+		}
+		html, body {
 			width: 100%;
 			height: 100%;
-			background-color: #000;
-        }
+			display: flex;
+			font-family: Helvetica, Arial, sans-serif;
+			font-size: 16px;
+		}
+		#canvas {
+			width: 100%;
+			height: 100%;
+			background: #000;
+		}
+		input {
+			all: unset;
+		}
+		#controls {
+			background-color: #111;
+			color: #FFF;
+		}
+		.controls_section h2 {
+			margin: 0.75rem 0.5rem;
+		}
+		.controls_section > div,
+		.controls_section > p,
+		.controls_section > label,
+		.controls_section > input
+		{
+			margin: 0.25rem 0.0rem 0.5rem 1.0rem;
+		}
+
+		input[type="checkbox"] {
+			appearance: none;
+			width: 1.25rem;
+			height: 1.25rem;
+			border: 0.15rem solid white;
+			display: grid;
+			place-content: center;
+		}
+		input[type="checkbox"]::before {
+			content: "";
+			width: 0.7rem;
+			height: 0.7rem;
+			text-align: center;
+			line-height: 1.0rem;
+			margin: 0;
+			padding: 0;
+			background-color: #111;
+		}
+		input[type="checkbox"]:hover::before {
+			background-color: #712323;
+		}
+		input[type="checkbox"]:checked::before {
+			background-color: #e34545;
+		}
+
+		.checkbox_label {
+			line-height: 1.5rem;
+			display: grid;
+			grid-template-columns: 1.25rem auto;
+			gap: 0.65rem;
+		}
+
+		.number_input_container {
+			display: flex;
+			align-items: baseline;
+		}
+		.number_input_container > div {
+			border: 0.15rem solid white;
+		}
+		.number_input_container label {
+			display: block;
+			width: 8rem;
+			margin-left: 0.5rem;
+			line-height: 1.65rem;
+		}
+		.number_input {
+			display: flex;
+		}
+		.number_input button {
+			width: 1.65rem;
+			height: 1.65rem;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			
+			background-color: #DDD;
+			color: #000;
+			font-size: 1.05rem;
+			font-weight: bold;
+			border: 0;
+			cursor: pointer;
+		}
+		.number_input input {
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			text-align: center;
+			
+			width: 3.0rem;
+			height: 1.65rem;
+			border-left: 0.15rem solid white;
+			border-right: 0.15rem solid white;
+		}
+		.number_input button:hover {
+			background-color: #FFF;
+		}
+
+		input[type="number"]::-webkit-outer-spin-button,
+		input[type="number"]::-webkit-inner-spin-button {
+			-webkit-appearance: none;
+			margin: 0;
+		}
+		input[type="number"] {
+			-moz-appearance: textfield;
+			background: 0;
+			border: 0;
+			color: #FFF;
+		}
     </style>
 </head>
 <body>
-    <canvas id="canvas"></canvas>
+	<div id="controls">
+		<div class="controls_section">
+			<h2>Options</h2>
+			<label class="checkbox_label">
+				<input type="checkbox" id="control_enable_simd" checked />
+				Enable SIMD
+			</label>
+			<label class="checkbox_label">
+				<input type="checkbox" id="control_enable_mt" />
+				Enable Multithreading
+			</label>
+			<div class="number_input_container">
+				<div class="number_input">
+					<button id="control_thread_count_sub">-</button>
+					<input id="control_thread_count_value" type="number" value="1" step="1" min="1" />
+					<button id="control_thread_count_add">+</button>
+				</div>
+				<label for="control_thread_count_value">Thread Count</label>
+			</div>
+			<div class="number_input_container">
+				<div class="number_input">
+					<button id="control_render_scale_sub">-</button>
+					<input id="control_render_scale_value" type="number" value="0.75" step="0.125" min="0.25" max="1.0" />
+					<button id="control_render_scale_add">+</button>
+				</div>
+				<label for="control_render_scale_value">Render Scale</label>
+			</div>
+		</div>
+		<div class="controls_section">
+			<h2>Stats</h2>
+			<p>Resolution: <span id="stats_render_width"></span>x<span id="stats_render_height"></span></p>
+			<p>Total Render Time: <span id="stats_total_render_time"></span>ms</p>
+			<p>Rays Cast: <span id="stats_rays_cast"></span></p>
+			<p>Avg Time Per Ray Cast: <span id="stats_avg_time_per_ray_cast"></span>ns<p>
+		</div>
+		<div class="controls_section">
+			<h2>Scenes</h2>
+		</div>
+	</div>
+    <canvas id="canvas" tabindex="1"></canvas>
 </body>
 </html>

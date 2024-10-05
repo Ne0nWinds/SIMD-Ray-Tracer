@@ -47,7 +47,7 @@ void *memory_arena::Push(u64 Size, u32 Alignment) {
     Assert((u64)NewOffset - (u64)this->Start <= this->Size);
     this->Offset = (void *)NewOffset;
 
-	memset(AlignedOffset, 0, Size);
+	__builtin_memset(AlignedOffset, 0, Size);
 
     return AlignedOffset;
 }
@@ -73,28 +73,31 @@ u32 GetProcessorThreadCount() {
 }
 
 static constexpr char CanvasName[] = "#canvas";
+static f64 RenderScale = 0.75;
 
 static void CalculateCanvasWidthAndHeight() {
-	u32 WindowWidth = (u32)EM_ASM_INT({ return window.innerWidth; });
-	u32 WindowHeight = (u32)EM_ASM_INT({ return window.innerHeight; });
+	f64 ElementWidth = 0, ElementHeight = 0;
+	emscripten_get_element_css_size(CanvasName, &ElementWidth, &ElementHeight);
 	f64 DevicePixelRatio = EM_ASM_DOUBLE({ return window.devicePixelRatio; });
-	constexpr f64 RenderScale = 0.75;
-	CanvasWidth = WindowWidth * DevicePixelRatio * RenderScale;
-	CanvasHeight = WindowHeight * DevicePixelRatio * RenderScale;
+	CanvasWidth = RoundNearestInt(ElementWidth * DevicePixelRatio * RenderScale);
+	CanvasHeight = RoundNearestInt(ElementHeight * DevicePixelRatio * RenderScale);
+	emscripten_glViewport(0, 0, CanvasWidth, CanvasHeight);
+	emscripten_set_canvas_element_size(CanvasName, CanvasWidth, CanvasHeight);
+	EM_ASM({
+		const renderWidthElement = document.getElementById("stats_render_width");
+		const renderHeightElement = document.getElementById("stats_render_height");
+		renderWidthElement.innerText = $0;
+		renderHeightElement.innerText = $1;
+	}, CanvasWidth, CanvasHeight);
 }
 
 static void InitializeWebGL() {
-	CalculateCanvasWidthAndHeight();
-	emscripten_set_canvas_element_size(CanvasName, CanvasWidth, CanvasHeight);
-
 	EmscriptenWebGLContextAttributes Attributes = {0};
 	emscripten_webgl_init_context_attributes(&Attributes);
 	Attributes.majorVersion = 1;
 	Attributes.antialias = EM_FALSE;
 	WebGLContext = emscripten_webgl_create_context(CanvasName, &Attributes);
 	emscripten_webgl_make_context_current(WebGLContext);
-
-	emscripten_glViewport(0, 0, CanvasWidth, CanvasHeight);
 
 	emscripten_glClearColor(0,0,0,1);
 	emscripten_glClear(GL_COLOR_BUFFER_BIT);
@@ -172,11 +175,10 @@ static EM_BOOL RequestAnimationFrameCallback(double time, void *) {
 
 	memory_arena Scratch = Temp.CreateScratch();
 	image Image = CreateImage(&Scratch, CanvasWidth, CanvasHeight, format::R8G8B8A8_U32);
-	memset(Image.Data, 0, Image.Width * Image.Height * sizeof(u32));
 	bool ShouldUpdateOutput = OnRender(Image);
 
-	// emscripten_glBindTexture(GL_TEXTURE_2D, GLTextureHandle);
 	if (ShouldUpdateOutput) {
+		// emscripten_glBindTexture(GL_TEXTURE_2D, GLTextureHandle);
 		emscripten_glClear(GL_COLOR_BUFFER_BIT);
 		emscripten_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Image.Width, Image.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Image.Data);
 		emscripten_glActiveTexture(GL_TEXTURE0);
@@ -202,6 +204,7 @@ static void SetKeyUp(key Key) {
     KeyboardState[HighBits] &= ~(1 << BitToSet);
 }
 
+// TODO: Better utilize ILP
 static constexpr u32 KeyCodeHash(const char *Code) {
 	u64 OutputHash = 0xFC738A83F87CC9C8;
 	u32 Index = 0;
@@ -217,6 +220,8 @@ static constexpr u32 KeyCodeHash(const char *Code) {
 static EM_BOOL KeyCallbackFunction(int EventType, const EmscriptenKeyboardEvent *Event, void *) {
 
 	u32 EventCodeHash = KeyCodeHash(Event->code);
+	// TODO: Remove unused key codes
+	// Branchless Binary Search?
 
 	key Key = key::None;
     switch (EventCodeHash) {
@@ -651,10 +656,64 @@ f64 QueryTimestampInMilliseconds() {
 	});
 }
 
-static EM_BOOL WindowResizeCallback(int eventType, const EmscriptenUiEvent* uiEvent, void* userData) {
+static EM_BOOL WindowResizeCallback(int EventType, const EmscriptenUiEvent* uiEvent, void*) {
 	CalculateCanvasWidthAndHeight();
-	emscripten_set_canvas_element_size(CanvasName, CanvasWidth, CanvasHeight);
-	emscripten_glViewport(0, 0, CanvasWidth, CanvasHeight);
+	return EM_TRUE;
+}
+
+static u32 ActiveThreadCount = 1;
+static u32 PreviousThreadCountValue = 1;
+
+static void UpdateMultithreadUIValues() {
+	EM_ASM({
+		const checkboxElement = document.getElementById("control_enable_mt");
+		checkboxElement.checked = $0 > 1;
+		const multithreadedValueElement = document.getElementById("control_thread_count_value");
+		multithreadedValueElement.value = $0;
+	}, ActiveThreadCount);
+}
+
+static EM_BOOL ThreadCountSubCallback(int EventType, const EmscriptenMouseEvent *MouseEvent, void *) {
+	if (ActiveThreadCount > 1) {
+		ActiveThreadCount -= 1;
+	}
+	PreviousThreadCountValue = ActiveThreadCount;
+	UpdateMultithreadUIValues();
+
+	return EM_TRUE;
+}
+static EM_BOOL ThreadCountAddCallback(int EventType, const EmscriptenMouseEvent *MouseEvent, void *) {
+	if (ActiveThreadCount < NumberOfProcessors) {
+		ActiveThreadCount += 1;
+	}
+	PreviousThreadCountValue = ActiveThreadCount;
+	UpdateMultithreadUIValues();
+
+	return EM_TRUE;
+}
+
+static void UpdateRenderScaleUIValue() {
+	EM_ASM({
+		const element = document.getElementById("control_render_scale_value");
+		let newValue = HEAPF64[$0 >> 3];
+		const min = element.min;
+		const max = element.max;
+		newValue = Math.max(Math.min(newValue, max), min);
+		element.value = newValue;
+		HEAPF64[$0 >> 3] = newValue;
+	}, &RenderScale);
+}
+
+static EM_BOOL RenderScaleAddCallback(int EventType, const EmscriptenMouseEvent *MouseEvent, void *) {
+	RenderScale += 0.125;
+	UpdateRenderScaleUIValue();
+	CalculateCanvasWidthAndHeight();
+	return EM_TRUE;
+}
+static EM_BOOL RenderScaleSubCallback(int EventType, const EmscriptenMouseEvent *MouseEvent, void *) {
+	RenderScale -= 0.125;
+	UpdateRenderScaleUIValue();
+	CalculateCanvasWidthAndHeight();
 	return EM_TRUE;
 }
 
@@ -667,8 +726,60 @@ int main() {
 
 	emscripten_request_animation_frame_loop(RequestAnimationFrameCallback, 0);
 
-	emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, EM_FALSE, KeyCallbackFunction);
-	emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, EM_FALSE, KeyCallbackFunction);
+	emscripten_set_keydown_callback(CanvasName, 0, EM_FALSE, KeyCallbackFunction);
+	emscripten_set_keyup_callback(CanvasName, 0, EM_FALSE, KeyCallbackFunction);
 
-	emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, true, WindowResizeCallback);
+	{
+		emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, true, WindowResizeCallback);
+
+		constexpr char ThreadCountSubElement[] = "#control_thread_count_sub";
+		constexpr char ThreadCountAddElement[] = "#control_thread_count_add";
+		emscripten_set_click_callback(ThreadCountSubElement, 0, EM_FALSE, ThreadCountSubCallback);
+		emscripten_set_click_callback(ThreadCountAddElement, 0, EM_FALSE, ThreadCountAddCallback);
+
+		constexpr char RenderScaleSubElement[] = "#control_render_scale_sub";
+		constexpr char RenderScaleAddElement[] = "#control_render_scale_add";
+		emscripten_set_click_callback(RenderScaleSubElement, 0, EM_FALSE, RenderScaleSubCallback);
+		emscripten_set_click_callback(RenderScaleAddElement, 0, EM_FALSE, RenderScaleAddCallback);
+
+		EM_ASM({
+			const threadCountValueElement = document.getElementById("control_thread_count_value");
+			threadCountValueElement.min = 1;
+			threadCountValueElement.max = navigator.hardwareConcurrency;
+			HEAP32[$0 >> 2] = threadCountValueElement.value;
+			const enableMTElement = document.getElementById("control_enable_mt");
+			enableMTElement.checked = threadCountValueElement.value > 1;
+
+			threadCountValueElement.onchange = (e) => {
+				let newValue = e.target.value | 0;
+				newValue = Math.min(Math.max(1, newValue), navigator.hardwareConcurrency | 0);
+				enableMTElement.checked = newValue > 1;
+				threadCountValueElement.value = newValue;
+				HEAP32[$0 >> 2] = newValue;
+			};
+			enableMTElement.onchange = (e) => {
+				const checked = e.target.checked;
+				if (checked) {
+					const newValue = (HEAP32[$1 >> 2] == 1) ? navigator.hardwareConcurrency : HEAP32[$1 >> 2];
+					HEAP32[$1 >> 2] = newValue;
+					HEAP32[$0 >> 2] = newValue;
+					threadCountValueElement.value = newValue;
+				} else {
+					HEAP32[$0 >> 2] = 1;
+					threadCountValueElement.value = 1;
+				}
+			};
+			const renderScaleElement = document.getElementById("control_render_scale_value");
+			HEAPF64[$2 >> 3] = renderScaleElement.value;
+			renderScaleElement.onchange = (e) => {
+				const newRenderScale = e.target.value;
+				const min = renderScaleElement.min;
+				const max = renderScaleElement.max;
+				element.value = Math.max(Math.min(newRenderScale, max), min);
+				HEAPF64[$2 >> 3] = newRenderScale;
+			}
+		}, &ActiveThreadCount, &PreviousThreadCountValue, &RenderScale);
+		emscripten_log(EM_LOG_CONSOLE, "%.3f", (f32)RenderScale);
+	}
+	CalculateCanvasWidthAndHeight();
 }

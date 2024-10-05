@@ -95,6 +95,13 @@ inline v4::v4(f32 X, f32 Y, f32 Z, f32 W) {
     *this = (v4)Value;
 }
 
+MATHCALL u32 RoundNearestInt(f32 a) {
+	return __builtin_nearbyintf(a);
+}
+MATHCALL u64 RoundNearestInt(f64 a) {
+	return __builtin_nearbyint(a);
+}
+
 MATHCALL u32 PopCount(u32 a) {
     return __builtin_popcount(a);
 }

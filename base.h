@@ -169,8 +169,8 @@ struct work_queue_context {
 typedef void (*thread_callback)(work_queue_context *);
 
 u32 GetProcessorThreadCount();
-void WorkQueueCreate(thread_callback ThreadCallback);
-void WorkQueueStart(u32 WorkItemCount, u32 ThreadCount);
+void WorkQueueCreate();
+void WorkQueueStart(thread_callback ThreadCallback, u32 WorkItemCount, u32 ThreadCount);
 void WorkQueueWaitUntilCompletion();
 bool WorkQueueIsReady();
 bool WorkQueueHasCompleted();

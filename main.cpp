@@ -476,11 +476,7 @@ void OnInit(init_params *Params) {
 
     RenderData = AllocateArenaFromOS(MB(512));
 
-#if 1
-	WorkQueueCreate(RenderTile);
-#else
-	WorkQueueCreate(RenderTileScalar);
-#endif
+	WorkQueueCreate();
 
     u32 ThreadCount = GetProcessorThreadCount();
 	u32 RequiredThreadDataSize = sizeof(thread_context) * ThreadCount;
@@ -642,7 +638,11 @@ bool OnRender(const image &Image, render_params RenderParams) {
     CameraInfo.TilesX = TilesX;
 
     u32 WorkItemCount = TilesX * TilesY;
-    WorkQueueStart(WorkItemCount, RenderParams.ThreadCount);
+    WorkQueueStart(
+		(RenderParams.EnableSIMD) ? RenderTile : RenderTileScalar,
+		WorkItemCount,
+		RenderParams.ThreadCount
+	);
 
 	return CopyToOutput;
 }

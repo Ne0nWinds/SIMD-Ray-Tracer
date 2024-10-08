@@ -11,11 +11,11 @@ static memory_arena Temp;
 
 static u32 CanvasWidth, CanvasHeight;
 static EMSCRIPTEN_WEBGL_CONTEXT_HANDLE WebGLContext;
-static constexpr u32 AllocationGranularity = KB(64); // Size of WASM virtual page
-													 //
+
 static u64 NumberOfProcessors;
 static u32 ActiveThreadCount = 1;
 static u32 PreviousThreadCountValue = 1;
+static bool EnableSIMD = true;
 
 static u32 GLTextureHandle;
 static u32 GLVertexBufferHandle;
@@ -180,7 +180,8 @@ static EM_BOOL RequestAnimationFrameCallback(double Time, void *) {
 	memory_arena Scratch = Temp.CreateScratch();
 	image Image = CreateImage(&Scratch, CanvasWidth, CanvasHeight, format::R8G8B8A8_U32);
 	render_params RenderParams = {
-		.ThreadCount = ActiveThreadCount
+		.ThreadCount = ActiveThreadCount,
+		.EnableSIMD = EnableSIMD
 	};
 	static bool ShouldStartMeasurement = true;
 	static f64 StartTime = 0;
@@ -630,7 +631,7 @@ void ThreadFunction(s32 ThreadIndex) {
 	}
 }
 
-void WorkQueueCreate(thread_callback ThreadCallback) {
+void WorkQueueCreate() {
 
 	emscripten_semaphore_init(&WorkQueueData.Semaphore, NumberOfProcessors);
 	emscripten_semaphore_try_acquire(&WorkQueueData.Semaphore, NumberOfProcessors);
@@ -645,11 +646,11 @@ void WorkQueueCreate(thread_callback ThreadCallback) {
 	}
 
 	WorkQueueData.ThreadCount = NumberOfProcessors;
-	WorkQueueData.ThreadCallback = ThreadCallback;
 	WorkQueueData.WorkIndex = 0;
 	WorkQueueData.WorkCompleted = 0;
 }
-void WorkQueueStart(u32 WorkItemCount, u32 ThreadCount) {
+void WorkQueueStart(thread_callback ThreadCallback, u32 WorkItemCount, u32 ThreadCount) {
+	WorkQueueData.ThreadCallback = ThreadCallback;
     WorkQueueData.WorkItemCount = WorkItemCount;
     WorkQueueData.WorkIndex = 0;
     WorkQueueData.WorkCompleted = 0;
@@ -768,6 +769,7 @@ int main() {
 			HEAP32[$0 >> 2] = threadCountValueElement.value;
 			const enableMTElement = document.getElementById("control_enable_mt");
 			enableMTElement.checked = threadCountValueElement.value > 1;
+			const enableSIMDElement = document.getElementById("control_enable_simd");
 
 			threadCountValueElement.onchange = (e) => {
 				let newValue = e.target.value | 0;
@@ -797,8 +799,13 @@ int main() {
 				const max = renderScaleElement.max;
 				element.value = Math.max(Math.min(newRenderScale, max), min);
 				HEAPF64[$2 >> 3] = newRenderScale;
-			}
-		}, &ActiveThreadCount, &PreviousThreadCountValue, &RenderScale);
+			};
+
+			HEAP32[$3 >> 2] = enableSIMDElement.checked;
+			enableSIMDElement.onchange = (e) => {
+				HEAP32[$3 >> 2] = enableSIMDElement.checked;
+			};
+		}, &ActiveThreadCount, &PreviousThreadCountValue, &RenderScale, &EnableSIMD);
 	}
 	CalculateCanvasWidthAndHeight();
 }

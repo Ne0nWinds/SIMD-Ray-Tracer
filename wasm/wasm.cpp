@@ -15,6 +15,7 @@ static EMSCRIPTEN_WEBGL_CONTEXT_HANDLE WebGLContext;
 static u64 NumberOfProcessors;
 static u32 ActiveThreadCount = 1;
 static u32 PreviousThreadCountValue = 1;
+static f64 LastWorkQueueCompletionTime;
 static bool EnableSIMD = true;
 static u32 SceneIndex = 0;
 
@@ -193,11 +194,10 @@ static EM_BOOL RequestAnimationFrameCallback(double Time, void *) {
 		ShouldStartMeasurement = false;
 	}
 	u64 TotalRaysCast = 0;
-	bool ShouldUpdateOutput = OnRender(Image, RenderParams, &TotalRaysCast);
+	f64 TimeElapsed = 0;
+	bool ShouldUpdateOutput = OnRender(Image, RenderParams, &TotalRaysCast, &TimeElapsed);
 
 	if (ShouldUpdateOutput) {
-		f64 EndTime = QueryTimestampInMilliseconds();
-		f64 TimeElapsed = EndTime - StartTime;
 		ShouldStartMeasurement = true;
 
 		f64 AverageTimePerRayCast = (TotalRaysCast != 0) ? TimeElapsed / TotalRaysCast * 1e6 : 0;
@@ -211,7 +211,7 @@ static EM_BOOL RequestAnimationFrameCallback(double Time, void *) {
 			const low = HEAPU32[$1 >> 2];
 			const high = HEAPU32[($1 >> 2) + 1];
 			const u64RaysCast = (BigInt(high) << BigInt(32)) | BigInt(low);
-			window._stats_rays_cast.innerText = u64RaysCast / BigInt(1000000);
+			window._stats_rays_cast.innerText = u64RaysCast;
 			window._avg_time.innerText = ($2).toFixed(4);
 		}, TimeElapsed, &TotalRaysCast, AverageTimePerRayCast);
 
@@ -632,15 +632,22 @@ void ThreadFunction(s32 ThreadIndex) {
 		emscripten_semaphore_waitinf_acquire(&WorkQueueData.Semaphore, 1);
 
 		u32 WorkEntry = emscripten_atomic_add_u32(&WorkQueueData.WorkIndex, 1);
-		u32 ItemCount = WorkQueueData.WorkItemCount;
+		u32 LastWorkCompleted = 0;
+
+		const u32 ItemCount = WorkQueueData.WorkItemCount;
 		while (WorkEntry < ItemCount) {
 			work_queue_context ThreadCallbackContext = {
 				.WorkEntry = WorkEntry,
 				.ThreadIndex = (u32)ThreadIndex
 			};
 			WorkQueueData.ThreadCallback(&ThreadCallbackContext);
-			emscripten_atomic_add_u32(&WorkQueueData.WorkCompleted, 1);
+			LastWorkCompleted = emscripten_atomic_add_u32(&WorkQueueData.WorkCompleted, 1);
 			WorkEntry = emscripten_atomic_add_u32(&WorkQueueData.WorkIndex, 1);
+		}
+		if (LastWorkCompleted + 1 == WorkQueueData.WorkItemCount) {
+			LastWorkQueueCompletionTime = EM_ASM_DOUBLE({
+				return performance.timeOrigin + performance.now();
+			});
 		}
 	}
 }
@@ -686,10 +693,13 @@ bool WorkQueueHasCompleted() {
 	u32 WorkCompleted = *(volatile u32 *)&WorkQueueData.WorkCompleted;
 	return WorkCompleted >= WorkQueueData.WorkItemCount;
 }
+f64 WorkQueueGetCompletionTime() {
+	return LastWorkQueueCompletionTime;
+}
 
 f64 QueryTimestampInMilliseconds() {
     return EM_ASM_DOUBLE({
-		return window.performance.now();
+		return performance.timeOrigin + performance.now();
 	});
 }
 
@@ -820,7 +830,7 @@ int main() {
 				const newRenderScale = e.target.value;
 				const min = renderScaleElement.min;
 				const max = renderScaleElement.max;
-				element.value = Math.max(Math.min(newRenderScale, max), min);
+				renderScaleElement.value = Math.max(Math.min(newRenderScale, max), min);
 				HEAPF64[$2 >> 3] = newRenderScale;
 			};
 

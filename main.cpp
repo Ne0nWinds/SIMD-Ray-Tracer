@@ -6,7 +6,7 @@
 
 static u32 PreviousRayCount = 0;
 static u64 TotalRaysCast = 0;
-static constexpr u32 TileSize = 64;
+static constexpr u32 TileSize = 32;
 
 struct material {
     v3 Color;
@@ -263,7 +263,7 @@ struct camera_info {
 
 struct thread_context {
     u32_random_state RandomState;
-    // camera_info *CameraInfo;
+	u64 RaysCastInThread;
 }__attribute__((__aligned__(64)));
 
 static camera_info CameraInfo = {};
@@ -327,9 +327,8 @@ static inline constexpr u32 ColorFromV4(const v4 &Value) {
 
 static void RenderTile(work_queue_context *WorkQueueContext) {
 
-	u64 TotalRaysCastInTile = 0;
-
     u32_random_state &RandomState = ThreadContexts[WorkQueueContext->ThreadIndex].RandomState;
+	u64 &RaysCastInThread = ThreadContexts[WorkQueueContext->ThreadIndex].RaysCastInThread;
 
     const image &CurrentImage = CameraInfo.CurrentImage;
     const image &PreviousImage = CameraInfo.PreviousImage; 
@@ -368,7 +367,7 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
             u32 MaxRayBounce = 5;
             for (u32 i = 0; i < MaxRayBounce; ++i) {
 
-				TotalRaysCastInTile += 1;
+				RaysCastInThread += 1;
 
                 v3x HitNormal = 0.0f;
                 v3x NextRayOrigin = 0.0f;
@@ -470,16 +469,14 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
 
             u32 &Pixel = GetPixel(CurrentImage, x, y);
             Pixel = ColorFromV4(LinearToSRGB(FinalColor));
-			emscripten_atomic_add_u64(&TotalRaysCast, TotalRaysCastInTile);
         }
     }
 }
 
 static void RenderTileScalar(work_queue_context *WorkQueueContext) {
 
-	u64 TotalRaysCastInTile = 0;
-
     u32_random_state &RandomState = ThreadContexts[WorkQueueContext->ThreadIndex].RandomState;
+    u64 &RaysCastInThread = ThreadContexts[WorkQueueContext->ThreadIndex].RaysCastInThread;
 
     const image &CurrentImage = CameraInfo.CurrentImage;
     const image &PreviousImage = CameraInfo.PreviousImage;
@@ -518,7 +515,7 @@ static void RenderTileScalar(work_queue_context *WorkQueueContext) {
             u32 MaxRayBounce = 5;
             for (u32 i = 0; i < MaxRayBounce; ++i) {
 
-				TotalRaysCastInTile += 1;
+				RaysCastInThread += 1;
 
                 v3 HitNormal = 0.0f;
                 v3 NextRayOrigin = 0.0f;
@@ -617,7 +614,6 @@ static void RenderTileScalar(work_queue_context *WorkQueueContext) {
 
             u32 &Pixel = GetPixel(CurrentImage, x, y);
             Pixel = ColorFromV4(LinearToSRGB(FinalColor));
-			emscripten_atomic_add_u64(&TotalRaysCast, TotalRaysCastInTile);
         }
     }
 }
@@ -676,12 +672,22 @@ static inline void CopyImage(image DstImage, image SrcImage) {
 	}
 }
 
-bool OnRender(const image &Image, render_params RenderParams, u64 *OutTotalRaysCast) {
+static u64 GetTotalRayCastCount() {
+	u32 ProcessorCount = GetProcessorThreadCount();
+	u64 Result = 0;
+	for (u32 i = 0; i < ProcessorCount; ++i) {
+		Result += ThreadContexts[i].RaysCastInThread;
+	}
+	return Result;
+}
+
+bool OnRender(const image &Image, render_params RenderParams, u64 *OutTotalRaysCast, f64 *OutTimeElapsed) {
 
 	if (!WorkQueueIsReady()) {
 		return false;
 	}
 
+	static f64 StartTime;
     static f32 DistanceFromLookAt;
     static f32 XAngle;
     static f32 YHeight;
@@ -810,8 +816,16 @@ bool OnRender(const image &Image, render_params RenderParams, u64 *OutTotalRaysC
     CameraInfo.CameraPosition = CameraPosition;
     CameraInfo.TilesX = TilesX;
 
-	*OutTotalRaysCast = TotalRaysCast;
-	TotalRaysCast = 0;
+	if (CopyToOutput) {
+		*OutTotalRaysCast = GetTotalRayCastCount();
+	}
+	const u32 ProcessorCount = GetProcessorThreadCount();
+	for (u32 i = 0; i < ProcessorCount; ++i) {
+		ThreadContexts[i].RaysCastInThread = 0;
+	}
+
+	*OutTimeElapsed = WorkQueueGetCompletionTime() - StartTime;
+	StartTime = QueryTimestampInMilliseconds();
 
     u32 WorkItemCount = TilesX * TilesY;
     WorkQueueStart(

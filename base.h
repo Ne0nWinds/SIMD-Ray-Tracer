@@ -161,7 +161,7 @@ struct render_params {
 };
 
 void OnInit(init_params *Params);
-bool OnRender(const image &Image, render_params RenderParams, u64 *OutTotalRaysCast);
+bool OnRender(const image &Image, render_params RenderParams, u64 *OutTotalRaysCast, f64 *OutTimeElapsed);
 
 struct work_queue_context {
     u32 WorkEntry;
@@ -175,6 +175,7 @@ void WorkQueueStart(thread_callback ThreadCallback, u32 WorkItemCount, u32 Threa
 void WorkQueueWaitUntilCompletion();
 bool WorkQueueIsReady();
 bool WorkQueueHasCompleted();
+f64 WorkQueueGetCompletionTime();
 
 enum class key : u32 {
 	None = 0x0,

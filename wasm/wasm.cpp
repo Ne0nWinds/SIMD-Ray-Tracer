@@ -776,6 +776,7 @@ int main() {
 			const threadCountValueElement = document.getElementById("control_thread_count_value");
 			threadCountValueElement.min = 1;
 			threadCountValueElement.max = navigator.hardwareConcurrency;
+			threadCountValueElement.value = navigator.hardwareConcurrency;
 			HEAP32[$0 >> 2] = threadCountValueElement.value;
 			const enableMTElement = document.getElementById("control_enable_mt");
 			enableMTElement.checked = threadCountValueElement.value > 1;

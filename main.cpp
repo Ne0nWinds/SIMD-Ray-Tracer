@@ -92,7 +92,8 @@ static inline void InitRandomizedSphereScene(scene *Scene) {
 	Scene->Materials.Data = RandomizedMaterials;
 	Scene->Materials.Count = array_len(RandomizedMaterials);
 
-    Scene->DefaultDistanceFromLookAt = 32.0f;
+    Scene->DefaultDistanceFromLookAt = 48.0f;
+    Scene->DefaultXAngle = (PI32 * 2.65f) / 2.0;
 
     u32_random_state RandomState = { 0x29D7A0A514F22432LLU };
     constexpr u32 Length = array_len(RandomizedScalarSpheres);
@@ -158,9 +159,9 @@ static inline void InitRGBSphereScene(scene *Scene) {
 	Scene->SIMDSpheres.Count = array_len(RGBSIMDSpheres);
 	Scene->Materials.Data = RGBMaterials;
 	Scene->Materials.Count = array_len(RGBMaterials);
-    Scene->DefaultDistanceFromLookAt = 13.0f;
+    Scene->DefaultDistanceFromLookAt = 16.0f;
     Scene->DefaultXAngle = PI32 / 3.0;
-    Scene->DefaultYHeight = 2.0f;
+    Scene->DefaultYHeight = 4.0f;
 
     CreateScalarSphere(v3(0.0f, -256 - 2.0f, -15.0f), 256.0f, v3(0.2f), 0.0f, 0.0f, 0.0f, RGBScalarSpheres + 0);
     CreateScalarSphere(v3(0.0f, 0, -10.0f), 2.0f, v3(1.0f), 0.0f, 1.5f, 0.0f, RGBScalarSpheres + 1);

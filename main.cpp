@@ -2,7 +2,7 @@
 #include "base.h"
 
 static u32 PreviousRayCount = 0;
-static constexpr u32 TileSize = 128;
+static constexpr u32 TileSize = 64;
 
 struct material {
     v3 Color;
@@ -21,11 +21,35 @@ struct sphere_group {
     f32x Radii;
 };
 
-static scalar_sphere ScalarSpheres[128];
-static sphere_group Spheres[array_len(ScalarSpheres) / SIMD_WIDTH];
-static material Materials[array_len(ScalarSpheres) + 1];
+template<typename T>
+struct array {
+	T *Data;
+	u32 Count;
+	inline constexpr T &operator[](u32 Index) {
+		Assert(Index < Count);
+		return Data[Index];
+	}
+	inline constexpr const T &operator[](u32 Index) const {
+		Assert(Index < Count);
+		return Data[Index];
+	}
+};
 
-static constexpr f32 WorldScale = 1.0f / 16.0f;
+struct scene {
+	v3 LookAt;
+	bool UseSkyColor;
+    f32 DefaultDistanceFromLookAt;
+    f32 DefaultXAngle;
+    f32 DefaultYHeight;
+	array<scalar_sphere> ScalarSpheres;
+	array<sphere_group> SIMDSpheres;
+	array<material> Materials;
+};
+
+static u32 SceneIndex = -1;
+static scene Scenes[3] = { };
+
+static constexpr f32 WorldScale = 1.0f;
 constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v3 &Color, f32 Specular, f32 IndexOfRefraction, const v3 &Emissive, scalar_sphere *Sphere) {
     Sphere->Position.x = Position.x * WorldScale;
     Sphere->Position.y = Position.y * WorldScale;
@@ -37,76 +61,185 @@ constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v
     Sphere->Material.IndexOfRefraction = IndexOfRefraction;
 }
 
-static constexpr inline void InitScalarSpheres(scalar_sphere *SpheresArray) {
-#if 0
-    CreateScalarSphere(v3(0.0f, 0.0f, -15.0f), 2.0f, v3(1.0f), 1.0f, 1.5f, 0.0f, ScalarSpheres + 0);
-    CreateScalarSphere(v3(0.0f, -130.0f, -15.0f), 128.0f, v3(0.2f), 0.0f, 0.0f, 0.0f, ScalarSpheres + 1);
-    CreateScalarSphere(v3(5.0f, 2.0f, -25.0f), 2.0f, v3(0.0f, 0.0f, 1.0f), 1.0f, 0.0f, 0.0f, ScalarSpheres + 2);
-    CreateScalarSphere(v3(6.0f, 6.0f, -18.0f), 2.0f, v3(0.75f, 0.85f, 0.125f), 1.0f, 0.0f, 0.0f, ScalarSpheres + 3);
-    CreateScalarSphere(v3(-7.0f, -0.5f, -25.0f), 1.25f, v3(1.0f, 0.5f, 0.0f), 0.95f, 0.0f, 0.0f, ScalarSpheres + 4);
-    CreateScalarSphere(v3(7.0f, 6.0f, -30.0f), 3.0f, v3(0.125f, 0.5f, 0.2f), 1.0f, 0.0f, 0.0f, ScalarSpheres + 5);
-    CreateScalarSphere(v3(-3.0f, 3.0f, -30.0f), 2.5f, v3(0.25f, 0.15f, 0.12f), 1.0f, 0.0f, 0.0f, ScalarSpheres + 6);
-    CreateScalarSphere(v3(-12.0f, 3.0f, -45.0f), 1.0f, v3(0.65f, 0.25f, 0.42f), 0.0f, 0.0f, 0.0f, ScalarSpheres + 7);
-    
-#elif 1
-    u32_random_state RandomState = { 0xCD46749A57ACB371 };
-    constexpr u32 Length = array_len(ScalarSpheres);
-    for (u32 i = 0; i < Length; ++i) {
-        v3 Position = 0.0f;
-        Position.x = RandomState.RandomFloat(-36.0f, 36.0f);
-        Position.y = RandomState.RandomFloat(-36.0f, 36.0f);
-        Position.z = RandomState.RandomFloat(-36.0f, 36.0f);
+static void constexpr ConvertScalarSpheresToSIMDSpheres(scene *Scene) {
+    for (u32 i = 0; i < Scene->ScalarSpheres.Count; i += SIMD_WIDTH) {
+        sphere_group &SphereGroup = Scene->SIMDSpheres[i / SIMD_WIDTH];
+		const u32 RemainingIterations = Scene->ScalarSpheres.Count - i;
+		u32 InnerLoopCount =  RemainingIterations > SIMD_WIDTH ? SIMD_WIDTH : RemainingIterations;
+        for (u32 j = 0; j < InnerLoopCount; ++j) {
+            f32 R = Scene->ScalarSpheres[i + j].Radius;
+            SphereGroup.Radii[j] = R;
+        }
+        for (u32 j = 0; j < InnerLoopCount; ++j) {
+            const v3 &Position = Scene->ScalarSpheres[i + j].Position;
+            SphereGroup.Positions[j] = Position;
+        }
+        for (u32 j = 0; j < InnerLoopCount; ++j) {
+            scalar_sphere Sphere = Scene->ScalarSpheres[i + j];
+            Scene->Materials[i + j] = Sphere.Material;
+        }
+    }
+}
 
-        f32 Radius = RandomState.RandomFloat(0.25f, 5.0f);
+static scalar_sphere RandomizedScalarSpheres[256];
+static sphere_group RandomizedSIMDSpheres[(array_len(RandomizedScalarSpheres) + (SIMD_WIDTH - 1)) / SIMD_WIDTH];
+static material RandomizedMaterials[array_len(RandomizedScalarSpheres) + 1];
+static inline void InitRandomizedSphereScene(scene *Scene) {
+	Scene->ScalarSpheres.Data = RandomizedScalarSpheres;
+	Scene->ScalarSpheres.Count = array_len(RandomizedScalarSpheres);
+	Scene->SIMDSpheres.Data = RandomizedSIMDSpheres;
+	Scene->SIMDSpheres.Count = array_len(RandomizedSIMDSpheres);
+	Scene->Materials.Data = RandomizedMaterials;
+	Scene->Materials.Count = array_len(RandomizedMaterials);
 
+    Scene->DefaultDistanceFromLookAt = 32.0f;
+
+    u32_random_state RandomState = { 0x29D7A0A514F22432LLU };
+    constexpr u32 Length = array_len(RandomizedScalarSpheres);
+
+	material Materials[28];
+	for (u32 i = 0; i < array_len(Materials); ++i) {
         v3 Color = 0.0f;
-        Color.x = RandomState.RandomFloat(0.1f, 1.0f);
-        Color.y = RandomState.RandomFloat(0.1f, 1.0f);
-        Color.z = RandomState.RandomFloat(0.1f, 1.0f);
+        Color.x = RandomState.RandomFloat(0.15f, 1.0f);
+        Color.y = RandomState.RandomFloat(0.1f, 0.75f);
+        Color.z = RandomState.RandomFloat(0.15f, 1.0f);
 
         v3 Emissive = 0.0f;
         f32 Specular = 0.0f;
-        f32 IndexOfRefraction = 0.0f;
-        if (RandomState.RandomFloat(0.0f) < 0.25f) {
-            Emissive = RandomState.RandomFloat(1.0f, 5.0f) * Color;
+        if (RandomState.RandomFloat(0.0f) < 0.125f) {
+            Emissive = RandomState.RandomFloat(2.0f, 5.0f) * Color;
         } else {
             f32 Random = RandomState.RandomFloat(0.0f);
-            if (Random < 0.25f) {
-                Color = 1.0f;
-                IndexOfRefraction = 1.5f;
-            } else {
-                Specular = Random > (0.75f / 2.0f) ? 1.0f : 0.0f;
+            if (Random < 0.65f) {
+                Specular = 1.0f;
             }
         }
+		Materials[i].Color = Color;
+		Materials[i].Emissive = Emissive;
+		Materials[i].IndexOfRefraction = 0.0f;
+		Materials[i].Specular = Specular;
+	}
+	
+	f32 Radius = RandomState.RandomFloat(2.0f, 8.0f);
+	const material &M = Materials[0];
+	CreateScalarSphere(v3(1.0, 0.0, 0.0), Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + 0);
+	CreateScalarSphere(v3(8.0, -1.0, 8.0), Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + 1);
+	CreateScalarSphere(v3(-20.0, -4.0, -20.0), Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + 2);
 
-        CreateScalarSphere(Position, Radius, Color, Specular, IndexOfRefraction, Emissive, SpheresArray + i);
+    for (u32 i = 3; i < Length; ++i) {
+        v3 Vector = 0.0f;
+        Vector.x = RandomState.RandomFloat();
+        Vector.y = RandomState.RandomFloat();
+        Vector.z = RandomState.RandomFloat();
+		v3 NormalizedVector = v3::Normalize(Vector);
+
+		u32 RandomIndex = i - 3;
+		f32 R = RandomizedScalarSpheres[RandomIndex].Radius;
+		v3 P = RandomizedScalarSpheres[RandomIndex].Position;
+
+		f32 Radius = RandomState.RandomFloat(1.0f, 4.0f);
+		v3 Position = P + NormalizedVector * (RandomState.RandomFloat(1.0, 8.0) + Radius + R);
+
+		const material &M = Materials[i % array_len(Materials)];
+        CreateScalarSphere(Position, Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + i);
     }
-#else
-    CreateScalarSphere(v3(0.0f, -256 - 2.0f, -15.0f), 256.0f, v3(0.2f), 0.0f, 0.0f, 0.0f, ScalarSpheres + 0);
-    CreateScalarSphere(v3(0.0f, 0, -10.0f), 2.0f, v3(1.0f), 0.0f, 1.5f, 0.0f, ScalarSpheres + 1);
 
-    CreateScalarSphere(v3(-4.0f, 1.0f, -15.0f), 1.5f, v3(1.0f, 0.0f, 0.0f), 0.0f, 0, v3(8.0f, 0.0f, 0.0f), ScalarSpheres + 2);
-    CreateScalarSphere(v3(0.0f, 1.0f, -15.0f), 1.5f, v3(1.0f, 0.0f, 0.0f), 0.0f, 0, v3(0.0f, 8.0f, 0.0f), ScalarSpheres + 3);
-    CreateScalarSphere(v3(4.0f, 1.0f, -15.0f), 1.5f, v3(1.0f, 0.0f, 0.0f), 0.0f, 0, v3(0.0f, 0.0f, 8.0f), ScalarSpheres + 4);
-#endif
+	ConvertScalarSpheresToSIMDSpheres(Scene);
+
+	Scene->LookAt = v3(2.0, 0.0, 2.0);
+}
+static scalar_sphere RGBScalarSpheres[5];
+static sphere_group RGBSIMDSpheres[(array_len(RGBScalarSpheres) + (SIMD_WIDTH - 1)) / SIMD_WIDTH];
+static material RGBMaterials[array_len(RGBScalarSpheres) + 1];
+static inline void InitRGBSphereScene(scene *Scene) {
+	Scene->ScalarSpheres.Data = RGBScalarSpheres;
+	Scene->ScalarSpheres.Count = array_len(RGBScalarSpheres);
+	Scene->SIMDSpheres.Data = RGBSIMDSpheres;
+	Scene->SIMDSpheres.Count = array_len(RGBSIMDSpheres);
+	Scene->Materials.Data = RGBMaterials;
+	Scene->Materials.Count = array_len(RGBMaterials);
+    Scene->DefaultDistanceFromLookAt = 13.0f;
+    Scene->DefaultXAngle = PI32 / 3.0;
+    Scene->DefaultYHeight = 2.0f;
+
+    CreateScalarSphere(v3(0.0f, -256 - 2.0f, -15.0f), 256.0f, v3(0.2f), 0.0f, 0.0f, 0.0f, RGBScalarSpheres + 0);
+    CreateScalarSphere(v3(0.0f, 0, -10.0f), 2.0f, v3(1.0f), 0.0f, 1.5f, 0.0f, RGBScalarSpheres + 1);
+    CreateScalarSphere(v3(-4.0f, 1.0f, -15.0f), 1.5f, v3(1.0f, 0.0f, 0.0f), 0.0f, 0, v3(8.0f, 0.0f, 0.0f), RGBScalarSpheres + 2);
+    CreateScalarSphere(v3(0.0f, 1.0f, -15.0f), 1.5f, v3(1.0f, 0.0f, 0.0f), 0.0f, 0, v3(0.0f, 8.0f, 0.0f), RGBScalarSpheres + 3);
+    CreateScalarSphere(v3(4.0f, 1.0f, -15.0f), 1.5f, v3(1.0f, 0.0f, 0.0f), 0.0f, 0, v3(0.0f, 0.0f, 8.0f), RGBScalarSpheres + 4);
+
+	ConvertScalarSpheresToSIMDSpheres(Scene);
+
+	Scene->LookAt = RGBScalarSpheres[1].Position;
 }
 
-static void constexpr ConvertScalarSpheresToSIMDSpheres(const scalar_sphere * const Spheres, u32 ScalarLength, sphere_group *SIMDSpheres) {
-    for (u32 i = 0; i < ScalarLength; i += SIMD_WIDTH) {
-        sphere_group &SphereGroup = SIMDSpheres[i / SIMD_WIDTH];
-        for (u32 j = 0; j < SIMD_WIDTH; ++j) {
-            f32 R = Spheres[i + j].Radius;
-            SphereGroup.Radii[j] = R;
-        }
-        for (u32 j = 0; j < SIMD_WIDTH; ++j) {
-            const v3 &Position = Spheres[i + j].Position;
-            SphereGroup.Positions[j] = Position;
-        }
-        for (u32 j = 0; j < SIMD_WIDTH; ++j) {
-            scalar_sphere Sphere = Spheres[i + j];
-            Materials[i + j + 1] = Sphere.Material;
-        }
-    }
+static scalar_sphere RTWeekendSpheres[482];
+static sphere_group RTWeekendSIMDSpheres[(array_len(RTWeekendSpheres) + (SIMD_WIDTH - 1)) / SIMD_WIDTH];
+static material RTWeekendMaterials[array_len(RTWeekendSpheres) + 1];
+static inline void InitRTWeekendSphereScene(scene *Scene) {
+	Scene->ScalarSpheres.Data = RTWeekendSpheres;
+	Scene->ScalarSpheres.Count = array_len(RTWeekendSpheres);
+	Scene->SIMDSpheres.Data = RTWeekendSIMDSpheres;
+	Scene->SIMDSpheres.Count = array_len(RTWeekendSIMDSpheres);
+	Scene->Materials.Data = RTWeekendMaterials;
+	Scene->Materials.Count = array_len(RTWeekendMaterials);
+	Scene->UseSkyColor = true;
+
+    Scene->DefaultDistanceFromLookAt = 12.0f;
+    Scene->DefaultXAngle = PI32 / 8;
+    Scene->DefaultYHeight = 2.0f;
+
+	u32 Index = 0;
+	CreateScalarSphere(v3(0, -1000, 0), 1000, v3(0.5), 0.0, 0.0, v3(0.0), RTWeekendSpheres + Index);
+	Index += 1;
+	CreateScalarSphere(v3(0, 1, 0), 1, v3(1.0), 0.0, 1.5, v3(0.0), RTWeekendSpheres + Index);
+	Index += 1;
+	CreateScalarSphere(v3(-4, 1, 0), 1, v3(0.4, 0.2, 0.1), 0.0, 0.0, v3(0.0), RTWeekendSpheres + Index);
+	Index += 1;
+	CreateScalarSphere(v3(4, 1, 0), 1, v3(0.7, 0.6, 0.5), 1.0, 0.0, v3(0.0), RTWeekendSpheres + Index);
+	Index += 1;
+
+    u32_random_state RandomState = { 0xCD46749A57ACB371 };
+
+	for (s32 i = -11; i < 11; ++i) {
+		for (s32 j = -11; j < 11; ++j) {
+			f32 M = RandomState.RandomFloat(0.0, 1.0);
+			v3 Center;
+			Center.x = i + RandomState.RandomFloat();
+			Center.y = 0.2;
+			Center.z = j + RandomState.RandomFloat();
+			if (v3::Length(Center - v3(4, 0.2, 0)) > 0.9) {
+				v3 Color = 0.0f;
+				v3 Emissive = 0.0f;
+				f32 Radius = 0.2f;
+				f32 Specular = 0.0f;
+				f32 IndexOfRefraction = 0.0f;
+
+				if (M < 0.8) {
+					Color = v3(
+						RandomState.RandomFloat(0.0, 1.0),
+						RandomState.RandomFloat(0.0, 1.0),
+						RandomState.RandomFloat(0.0, 1.0)
+					);
+				} else if (M < 0.95) {
+					Color = v3(
+						RandomState.RandomFloat(0.0, 1.0),
+						RandomState.RandomFloat(0.0, 1.0),
+						RandomState.RandomFloat(0.0, 1.0)
+					);
+					Specular = RandomState.RandomFloat(0.5, 1.0);
+				} else {
+					Color = 1.0f;
+					IndexOfRefraction = 1.5f;
+				}
+				CreateScalarSphere(Center, Radius, Color, Specular, IndexOfRefraction, Emissive, RTWeekendSpheres + Index);
+				Index += 1;
+			}
+		}
+	}
+
+	Scene->LookAt = RTWeekendSpheres[1].Position;
+	ConvertScalarSpheresToSIMDSpheres(Scene);
 }
 
 struct camera_info {
@@ -208,6 +341,8 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
     u32 TileBottom = TileTop + Min(TileSize, CurrentImage.Height - TileTop);
     u32 TileRight = TileLeft + Min(TileSize, CurrentImage.Width - TileLeft);
 
+	const scene Scene = Scenes[SceneIndex];
+
     for (u32 y = TileTop; y < TileBottom; ++y) {
         for (u32 x = TileLeft; x < TileRight; ++x) {
 
@@ -225,23 +360,20 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
 
             u32 MaxRayBounce = 5;
             for (u32 i = 0; i < MaxRayBounce; ++i) {
-                f32 A = (RayDirection.y + 1.0f) * 0.5f;
-                // Materials[0].Emissive = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
-                (void)A;
-
                 v3x HitNormal = 0.0f;
                 v3x NextRayOrigin = 0.0f;
                 f32x MinT = F32Max;
                 u32x MaterialIndex = 0;
                 f32x InsideSphere = 0;
 
-                for (u32 s = 0; s < array_len(Spheres); ++s) {
-                    const sphere_group &SphereGroup = Spheres[s];
+#pragma clang loop unroll_count(2)
+                for (u32 s = 0; s < Scene.SIMDSpheres.Count; ++s) {
+                    const sphere_group SphereGroup = Scene.SIMDSpheres[s];
                     v3x SphereCenter = SphereGroup.Positions - RayOrigin;
                     f32x T = v3x::Dot(SphereCenter, RayDirection);
                     v3x ProjectedPoint = v3x(RayDirection) * T;
 
-                    const f32x &Radius = SphereGroup.Radii;
+                    const f32x Radius = SphereGroup.Radii;
                     const f32x RadiusSquared = Radius * Radius;
                     f32x DistanceFromCenter = v3x::LengthSquared(SphereCenter - ProjectedPoint);
 
@@ -261,7 +393,7 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
 
                     v3x IntersectionPoint = RayDirection * IntersectionT;
                     v3x Normal = (IntersectionPoint - SphereCenter);
-                    f32x::ConditionalMove(&InsideSphere, 1.0f, IntersectionTest & MoveMask);
+                    f32x::ConditionalMove(&InsideSphere, f32x(u32x4(-1)), IntersectionTest & MoveMask);
                     u32x::ConditionalMove(&MaterialIndex, s, u32x(MoveMask));
                     f32x::ConditionalMove(&MinT, IntersectionT, MoveMask);
                     v3x::ConditionalMove(&HitNormal, Normal, MoveMask);
@@ -269,21 +401,28 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
                 }
 
                 u32 Index = f32x::HorizontalMinIndex(MinT);
-                if (MinT[Index] == F32Max) break;
+                if (MinT[Index] == F32Max) {
+					if (Scene.UseSkyColor) {
+						f32 A = (RayDirection.y + 1.0f) * 0.5f;
+						v3 SkyEmissive = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
+						OutputColor += SkyEmissive * Attenuation;
+					}
+					break;
+				}
 
-                const u32 AbsoluteIndex = MaterialIndex[Index] * SIMD_WIDTH + Index + 1;
-                const material &Material = Materials[AbsoluteIndex];
+                const u32 AbsoluteIndex = MaterialIndex[Index] * SIMD_WIDTH + Index;
+                const material Material = Scene.Materials[AbsoluteIndex];
 
                 OutputColor += Material.Emissive * Attenuation;
                 Attenuation *= Material.Color;
-                RayOrigin = v3(NextRayOrigin[Index]);
+                RayOrigin = v3(NextRayOrigin.x[Index], NextRayOrigin.y[Index], NextRayOrigin.z[Index]);
 
                 f32 Specular = Material.Specular;
-                v3 Normal = v3::Normalize(v3(HitNormal[Index]));
+                v3 Normal = v3::Normalize(v3(HitNormal.x[Index], HitNormal.y[Index], HitNormal.z[Index]));
 
                 v3 PureBounce = RayDirection - 2.0f * v3::Dot(RayDirection, Normal) * Normal;
 
-                bool RayOriginInSphere = InsideSphere[Index] != 0.0f;
+                bool RayOriginInSphere = InsideSphere[Index] != 0;
                 if (RayOriginInSphere) {
                     Normal = -Normal;
                 }
@@ -346,6 +485,8 @@ static void RenderTileScalar(work_queue_context *WorkQueueContext) {
     u32 TileBottom = TileTop + Min(TileSize, CurrentImage.Height - TileTop);
     u32 TileRight = TileLeft + Min(TileSize, CurrentImage.Width - TileLeft);
 
+	const scene Scene = Scenes[SceneIndex];
+
     for (u32 y = TileTop; y < TileBottom; ++y) {
         for (u32 x = TileLeft; x < TileRight; ++x) {
 
@@ -363,23 +504,19 @@ static void RenderTileScalar(work_queue_context *WorkQueueContext) {
 
             u32 MaxRayBounce = 5;
             for (u32 i = 0; i < MaxRayBounce; ++i) {
-                f32 A = (RayDirection.y + 1.0f) * 0.5f;
-                // Materials[0].Emissive = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
-                (void)A;
-
                 v3 HitNormal = 0.0f;
                 v3 NextRayOrigin = 0.0f;
                 f32 MinT = F32Max;
                 u32 SphereIndex = 0;
                 bool RayOriginInSphere = false;
 
-                for (u32 s = 0; s < array_len(ScalarSpheres); ++s) {
-                    const scalar_sphere &Sphere = ScalarSpheres[s];
+                for (u32 s = 0; s < Scene.ScalarSpheres.Count; ++s) {
+                    const scalar_sphere Sphere = Scene.ScalarSpheres[s];
                     v3 SphereCenter = Sphere.Position - RayOrigin;
                     f32 T = v3::Dot(SphereCenter, RayDirection);
                     v3 ProjectedPoint = RayDirection * T;
 
-                    const f32 &Radius = Sphere.Radius;
+                    const f32 Radius = Sphere.Radius;
                     const f32 RadiusSquared = Radius * Radius;
                     f32 DistanceFromCenter = v3::LengthSquared(SphereCenter - ProjectedPoint);
 
@@ -407,9 +544,16 @@ static void RenderTileScalar(work_queue_context *WorkQueueContext) {
                     NextRayOrigin = RayOrigin + IntersectionPoint;
                 }
 
-                if (MinT == F32Max) break;
+                if (MinT == F32Max) {
+					if (Scene.UseSkyColor) {
+						f32 A = (RayDirection.y + 1.0f) * 0.5f;
+						v3 SkyEmissive = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
+						OutputColor += SkyEmissive * Attenuation;
+					}
+					break;
+				}
 
-                const material &Material = ScalarSpheres[SphereIndex].Material;
+                const material &Material = Scene.ScalarSpheres[SphereIndex].Material;
 
                 OutputColor += Material.Emissive * Attenuation;
                 Attenuation *= Material.Color;
@@ -471,8 +615,11 @@ void OnInit(init_params *Params) {
     Params->WindowWidth = 1280;
     Params->WindowHeight = 720;
 
-    InitScalarSpheres(ScalarSpheres);
-    ConvertScalarSpheresToSIMDSpheres(ScalarSpheres, array_len(ScalarSpheres), Spheres);
+	InitRGBSphereScene(Scenes + 0);
+	InitRandomizedSphereScene(Scenes + 1);
+	InitRTWeekendSphereScene(Scenes + 2);
+    // InitScalarSpheres(ScalarSpheres);
+    // ConvertScalarSpheresToSIMDSpheres(ScalarSpheres, array_len(ScalarSpheres), Spheres);
 
     RenderData = AllocateArenaFromOS(MB(512));
 
@@ -480,8 +627,8 @@ void OnInit(init_params *Params) {
 
     u32 ThreadCount = GetProcessorThreadCount();
 	u32 RequiredThreadDataSize = sizeof(thread_context) * ThreadCount;
-    ThreadData = AllocateArenaFromOS(RequiredThreadDataSize);
-	ThreadContexts = (thread_context *)ThreadData.Push(RequiredThreadDataSize);
+    ThreadData = AllocateArenaFromOS(RequiredThreadDataSize + 64);
+	ThreadContexts = (thread_context *)ThreadData.Push(RequiredThreadDataSize, 64);
 
     for (u32 i = 0; i < ThreadCount; ++i) {
         u64 InitialSeed = 0x420247153476526ULL * (u64)i;
@@ -518,16 +665,27 @@ bool OnRender(const image &Image, render_params RenderParams) {
 		return false;
 	}
 
-    v3 LookAt = v3(Spheres[3].Positions[1]);
 
-    static f32 DistanceFromLookAt = 2.0f;
-    static f32 XAngle = PI32 / 3.0;
-    static f32 YHeight = 0.0f;
-	static v3 CameraPosition;
+    static f32 DistanceFromLookAt;
+    static f32 XAngle;
+    static f32 YHeight;
+	v3 CameraPosition;
 
     bool Moved = false;
+	if (SceneIndex != RenderParams.SceneIndex) {
+		if (!WorkQueueHasCompleted()) {
+			return false;
+		}
+		SceneIndex = RenderParams.SceneIndex;
+		DistanceFromLookAt = Scenes[SceneIndex].DefaultDistanceFromLookAt;
+		XAngle = Scenes[SceneIndex].DefaultXAngle;
+		YHeight = Scenes[SceneIndex].DefaultYHeight;
+		Moved = true;
+	}
+    const v3 LookAt = Scenes[SceneIndex].LookAt;
+
     {
-        constexpr f32 MovementSpeed = 0.125f * WorldScale;
+        constexpr f32 MovementSpeed = 1.0f;
         if (IsDown(key::W) || IsDown(key::ArrowUp)) {
             DistanceFromLookAt -= MovementSpeed;
             Moved = true;
@@ -537,11 +695,11 @@ bool OnRender(const image &Image, render_params RenderParams) {
             Moved = true;
         }
         if (IsDown(key::D) || IsDown(key::ArrowRight)) {
-            XAngle -= MovementSpeed;
+            XAngle -= MovementSpeed / 16.0f;
             Moved = true;
         }
         if (IsDown(key::A) || IsDown(key::ArrowLeft)) {
-            XAngle += MovementSpeed;
+            XAngle += MovementSpeed / 16.0f;
             Moved = true;
         }
         if (IsDown(key::Space)) {

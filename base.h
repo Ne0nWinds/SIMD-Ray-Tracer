@@ -157,6 +157,7 @@ struct init_params {
 struct render_params {
 	u32 ThreadCount;
 	bool EnableSIMD;
+	u32 SceneIndex;
 };
 
 void OnInit(init_params *Params);
@@ -881,7 +882,7 @@ struct v4x4 {
     }
 };
 
-constexpr static f32 F32Epsilon = 1e-5f;
+constexpr static f32 F32Epsilon = 1e-4f;
 constexpr static f32 F32Min = 1e-30f;
 constexpr static f32 F32Max = 1e30f;
 constexpr static f32 PI32 = 3.14159265358979323846f;
@@ -903,7 +904,7 @@ constexpr static u32 F32SignBit = 0x8000'0000;
 #define RANDOM_ALGORITHM_XORSHIFT 2
 #define RANDOM_ALGORITHM_LCG 3
 
-static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_LCG;
+static constexpr u32 DefaultRandomAlgorithm = RANDOM_ALGORITHM_PCG;
 
 struct u32x_random_state {
     u32x Seed;
@@ -977,6 +978,13 @@ struct u32_random_state {
     }
     constexpr inline f32 RandomFloat(f32 Min = -1.0f, f32 Max = 1.0f) {
         u32 N = this->RandomInt();
+        f32 InverseMaxInt = (Max - Min) / (f64)((u32)-1);
+        f32 RandomFloat = (f32)N * InverseMaxInt;
+        f32 Result = RandomFloat + Min;
+        return Result;
+    }
+    constexpr inline f32 RandomFloatLCG(f32 Min = -1.0f, f32 Max = 1.0f) {
+        u32 N = this->LCG();
         f32 InverseMaxInt = (Max - Min) / (f64)((u32)-1);
         f32 RandomFloat = (f32)N * InverseMaxInt;
         f32 Result = RandomFloat + Min;

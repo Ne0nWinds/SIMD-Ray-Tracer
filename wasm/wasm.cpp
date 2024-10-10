@@ -16,6 +16,7 @@ static u64 NumberOfProcessors;
 static u32 ActiveThreadCount = 1;
 static u32 PreviousThreadCountValue = 1;
 static bool EnableSIMD = true;
+static u32 SceneIndex = 0;
 
 static u32 GLTextureHandle;
 static u32 GLVertexBufferHandle;
@@ -181,7 +182,8 @@ static EM_BOOL RequestAnimationFrameCallback(double Time, void *) {
 	image Image = CreateImage(&Scratch, CanvasWidth, CanvasHeight, format::R8G8B8A8_U32);
 	render_params RenderParams = {
 		.ThreadCount = ActiveThreadCount,
-		.EnableSIMD = EnableSIMD
+		.EnableSIMD = EnableSIMD,
+		.SceneIndex = SceneIndex
 	};
 	static bool ShouldStartMeasurement = true;
 	static f64 StartTime = 0;
@@ -736,6 +738,10 @@ static EM_BOOL RenderScaleSubCallback(int EventType, const EmscriptenMouseEvent 
 	CalculateCanvasWidthAndHeight();
 	return EM_TRUE;
 }
+static EM_BOOL SetSceneIndex(int EventType, const EmscriptenMouseEvent *MouseEvent, void *NewSceneIndex) {
+	SceneIndex = (u32)NewSceneIndex;
+	return EM_TRUE;
+}
 
 int main() {
 	InitializeWebGL();
@@ -761,6 +767,10 @@ int main() {
 		constexpr char RenderScaleAddElement[] = "#control_render_scale_add";
 		emscripten_set_click_callback(RenderScaleSubElement, 0, EM_FALSE, RenderScaleSubCallback);
 		emscripten_set_click_callback(RenderScaleAddElement, 0, EM_FALSE, RenderScaleAddCallback);
+
+		emscripten_set_click_callback("#scene_rgb", (void *)0, EM_FALSE, SetSceneIndex);
+		emscripten_set_click_callback("#scene_randomized", (void *)1, EM_FALSE, SetSceneIndex);
+		emscripten_set_click_callback("#scene_rtweekend", (void *)2, EM_FALSE, SetSceneIndex);
 
 		EM_ASM({
 			const threadCountValueElement = document.getElementById("control_thread_count_value");

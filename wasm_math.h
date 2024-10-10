@@ -351,10 +351,9 @@ MATHCALL f32x4 operator^(const f32x4 &A, const f32x4 &B) {
     return (f32x4)Result;
 }
 MATHCALL bool IsZero(const f32x4 &Value) {
-    v128 Zero = wasm_f32x4_const_splat(0.0f);
-    v128 ComparisonResult = wasm_f32x4_ne(v128(Value), Zero);
-    bool Result = wasm_v128_any_true(ComparisonResult);
-    return Result == 0;
+    v128 ComparisonResult = wasm_f32x4_eq(v128(Value), wasm_f32x4_const_splat(0.0f));
+    bool Result = wasm_i32x4_all_true(ComparisonResult);
+    return Result;
 }
 
 MATHCALL u32x4 operator+(const u32x4 &A, const u32x4 &B) {

@@ -21,7 +21,7 @@ clang -g -O3 $defines -Wall -Wno-unused-function -unused-function -nostdlib --ta
 cp -Force wasm\*html build\wasm
 cp -Force wasm\*js build\wasm
 #>
-emcc -O2 main.cpp wasm\wasm.cpp $defines -sALLOW_MEMORY_GROWTH -sASSERTIONS -sMAX_WEBGL_VERSION=1 -sWASM_WORKERS -msimd128 -mbulk-memory -o build\wasm\main.wasm -o build\wasm\wasm_glue.js
+emcc -O3 main.cpp wasm\wasm.cpp $defines -sALLOW_MEMORY_GROWTH -sMAX_WEBGL_VERSION=1 -sWASM_WORKERS -sASSERTIONS -msimd128 -mbulk-memory -o build\wasm\main.wasm -o build\wasm\wasm_glue.js
 cp -Force wasm\index.html build\wasm\index.html
 # cp -Force wasm\*js build\wasm
 

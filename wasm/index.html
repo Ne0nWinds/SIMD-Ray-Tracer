@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
+    <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp">
     <title>SIMD Ray Tracer</title>
 	<script src="wasm_glue.js" defer></script>
     <style>
@@ -133,6 +135,21 @@
 			border: 0;
 			color: #FFF;
 		}
+		#scene_selection > button {
+			display: block;
+			margin: 0.25rem 0.0rem 0.5rem 1.0rem;
+			background: #222;
+			padding: 0.35rem;
+			color: #FFF;
+		}
+		#scene_selection > button:hover {
+			background: #444444;
+			cursor: pointer;
+		}
+		#scene_selection > button:active {
+			background: #555555;
+			cursor: pointer;
+		}
     </style>
 </head>
 <body>
@@ -171,8 +188,11 @@
 			<p>Rays Cast: <span id="stats_rays_cast"></span></p>
 			<p>Avg Time Per Ray Cast: <span id="stats_avg_time_per_ray_cast"></span>ns<p>
 		</div>
-		<div class="controls_section">
-			<h2>Scenes</h2>
+		<div class="controls_section" id="scene_selection">
+			<h2>Load Scenes</h2>
+			<button id="scene_rgb">RGB Spheres</button>
+			<button id="scene_randomized">Randomized Benchmark</button>
+			<button id="scene_rtweekend">Ray Tracing in One Weekend</button>
 		</div>
 	</div>
 	<canvas id="canvas" tabindex="1"></canvas>

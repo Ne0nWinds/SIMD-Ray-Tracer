@@ -161,7 +161,7 @@ struct render_params {
 };
 
 void OnInit(init_params *Params);
-bool OnRender(const image &Image, render_params RenderParams);
+bool OnRender(const image &Image, render_params RenderParams, u64 *OutTotalRaysCast);
 
 struct work_queue_context {
     u32 WorkEntry;

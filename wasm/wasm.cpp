@@ -192,19 +192,31 @@ static EM_BOOL RequestAnimationFrameCallback(double Time, void *) {
 		StartTime = QueryTimestampInMilliseconds();
 		ShouldStartMeasurement = false;
 	}
-	bool ShouldUpdateOutput = OnRender(Image, RenderParams);
+	u64 TotalRaysCast = 0;
+	bool ShouldUpdateOutput = OnRender(Image, RenderParams, &TotalRaysCast);
 
 	if (ShouldUpdateOutput) {
 		f64 EndTime = QueryTimestampInMilliseconds();
 		f64 TimeElapsed = EndTime - StartTime;
 		ShouldStartMeasurement = true;
+
+		f64 AverageTimePerRayCast = (TotalRaysCast != 0) ? TimeElapsed / TotalRaysCast * 1e6 : 0;
 		EM_ASM({
-			const totalRenderTime = document.getElementById("stats_total_render_time");
-			totalRenderTime.innerText = ($0).toFixed(3);
-		}, TimeElapsed);
+			if (!window._stats_total_render_time) {
+				window._stats_total_render_time = document.getElementById("stats_total_render_time");
+				window._stats_rays_cast = document.getElementById("stats_rays_cast");
+				window._avg_time = document.getElementById("stats_avg_time_per_ray_cast");
+			}
+			window._stats_total_render_time.innerText = ($0).toFixed(3);
+			const low = HEAPU32[$1 >> 2];
+			const high = HEAPU32[($1 >> 2) + 1];
+			const u64RaysCast = (BigInt(high) << BigInt(32)) | BigInt(low);
+			window._stats_rays_cast.innerText = u64RaysCast / BigInt(1000000);
+			window._avg_time.innerText = ($2).toFixed(4);
+		}, TimeElapsed, &TotalRaysCast, AverageTimePerRayCast);
 
 		// emscripten_glBindTexture(GL_TEXTURE_2D, GLTextureHandle);
-		emscripten_glClear(GL_COLOR_BUFFER_BIT);
+		// emscripten_glClear(GL_COLOR_BUFFER_BIT);
 		emscripten_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Image.Width, Image.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Image.Data);
 		emscripten_glActiveTexture(GL_TEXTURE0);
 		emscripten_glDrawArrays(GL_TRIANGLES, 0, 6);

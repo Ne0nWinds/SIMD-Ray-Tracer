@@ -27,11 +27,24 @@
 			background-color: #111;
 			color: #FFF;
 			min-width: 20rem;
-			max-width: 20rem;
+			overflow-y: auto;
 		}
 		#canvas {
 			width: calc(100% - 20rem);
 			background: #000;
+		}
+		@media screen and (orientation: portrait) {
+			body {
+				flex-direction: column-reverse;
+			};
+			div#controls {
+				width: 100%;
+				height: 60%;
+			}
+			canvas#canvas {
+				width: 100%;
+				height: 40%;
+			}
 		}
 		input {
 			all: unset;

@@ -500,6 +500,8 @@ struct f32x4 {
     static inline void ConditionalMove(f32x4 *A, const f32x4 &B, const f32x4 &MoveMask);
     static inline f32 HorizontalMin(const f32x4 &A);
     static inline u32 HorizontalMinIndex(const f32x4 &A);
+    static inline u32 FindFirstIndex(const f32x4 &A, f32 Value);
+    inline f32 Extract(u32 Index);
 } __attribute__((__vector_size__(16), __aligned__(16)));
 MATHCALL f32x4 operator+(const f32x4 &A, const f32x4 &B);
 MATHCALL f32x4 operator-(const f32x4 &A, const f32x4 &B);
@@ -541,6 +543,7 @@ struct u32x4 {
     }
 
     static inline void ConditionalMove(u32x4 *A, const u32x4 &B, const u32x4 &MoveMask);
+    inline u32 Extract(u32 Index);
 } __attribute__((__vector_size__(16), __aligned__(16)));
 
 MATHCALL u32x4 operator+(const u32x4 &A, const u32x4 &B);

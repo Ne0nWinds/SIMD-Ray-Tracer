@@ -409,8 +409,8 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
                     v3x::ConditionalMove(&NextRayOrigin, RayOrigin + IntersectionPoint, MoveMask);
                 }
 
-                u32 Index = f32x::HorizontalMinIndex(MinT);
-                if (MinT[Index] == F32Max) {
+                f32 MinValue = f32x::HorizontalMin(MinT);
+                if (MinValue == F32Max) {
 					if (Scene.UseSkyColor) {
 						f32 A = (RayDirection.y + 1.0f) * 0.5f;
 						v3 SkyEmissive = (1.0f - A) * v3(1.0f) + A * v3(0.5, 0.7, 1.0);
@@ -418,20 +418,21 @@ static void RenderTile(work_queue_context *WorkQueueContext) {
 					}
 					break;
 				}
+				u32 Index = f32x::FindFirstIndex(MinT, MinValue);
 
-                const u32 AbsoluteIndex = MaterialIndex[Index] * SIMD_WIDTH + Index;
+                const u32 AbsoluteIndex = MaterialIndex.Extract(Index) * SIMD_WIDTH + Index;
                 const material Material = Scene.Materials[AbsoluteIndex];
 
                 OutputColor += Material.Emissive * Attenuation;
                 Attenuation *= Material.Color;
-                RayOrigin = v3(NextRayOrigin.x[Index], NextRayOrigin.y[Index], NextRayOrigin.z[Index]);
+                RayOrigin = v3(NextRayOrigin.x.Extract(Index), NextRayOrigin.y.Extract(Index), NextRayOrigin.z.Extract(Index));
 
                 f32 Specular = Material.Specular;
-                v3 Normal = v3::Normalize(v3(HitNormal.x[Index], HitNormal.y[Index], HitNormal.z[Index]));
+                v3 Normal = v3::Normalize(v3(HitNormal.x.Extract(Index), HitNormal.y.Extract(Index), HitNormal.z.Extract(Index)));
 
                 v3 PureBounce = RayDirection - 2.0f * v3::Dot(RayDirection, Normal) * Normal;
 
-                bool RayOriginInSphere = InsideSphere[Index] != 0;
+                bool RayOriginInSphere = InsideSphere.Extract(Index) != 0;
                 if (RayOriginInSphere) {
                     Normal = -Normal;
                 }

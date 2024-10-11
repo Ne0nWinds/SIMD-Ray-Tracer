@@ -281,10 +281,45 @@ inline f32 f32x4::HorizontalMin(const f32x4 &Value) {
 }
 inline u32 f32x4::HorizontalMinIndex(const f32x4 &Value) {
     f32 MinValue = f32x4::HorizontalMin(Value);
-    v128 Comparison = Value == f32x4(MinValue);
+    return f32x4::FindFirstIndex(Value, MinValue);
+}
+inline u32 f32x4::FindFirstIndex(const f32x4 &A, f32 Value) {
+    v128 Comparison = A == f32x4(Value);
     u32 MoveMask = wasm_i32x4_bitmask(Comparison);
     u32 Result = __builtin_ctz(MoveMask);
     return Result;
+}
+inline f32 f32x4::Extract(u32 Index) {
+	u32 I1 = Index * 4 + 0;
+	u32 I2 = Index * 4 + 1;
+	u32 I3 = Index * 4 + 2;
+	u32 I4 = Index * 4 + 3;
+
+	v128_t SwizzleIndices = wasm_i8x16_make(
+		I1, I2, I3, I4,
+		0, 0, 0, 0,
+		0, 0, 0, 0,
+		0, 0, 0, 0
+	);
+	v128_t ResultVector = wasm_i8x16_swizzle(v128(*this), SwizzleIndices);
+	f32 Result = wasm_f32x4_extract_lane(ResultVector, 0);
+	return Result;
+}
+inline u32 u32x4::Extract(u32 Index) {
+	u32 I1 = Index * 4 + 0;
+	u32 I2 = Index * 4 + 1;
+	u32 I3 = Index * 4 + 2;
+	u32 I4 = Index * 4 + 3;
+
+	v128_t SwizzleIndices = wasm_i8x16_make(
+		I1, I2, I3, I4,
+		0, 0, 0, 0,
+		0, 0, 0, 0,
+		0, 0, 0, 0
+	);
+	v128_t ResultVector = wasm_i8x16_swizzle(v128(*this), SwizzleIndices);
+	u32 Result = wasm_u32x4_extract_lane(ResultVector, 0);
+	return Result;
 }
 
 MATHCALL f32x4 operator+(const f32x4 &A, const f32x4 &B) {

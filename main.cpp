@@ -53,7 +53,7 @@ struct scene {
 static u32 SceneIndex = -1;
 static scene Scenes[3] = { };
 
-static constexpr f32 WorldScale = 1.0f;
+static constexpr f32 WorldScale = 1.0 / 16.0f;
 constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v3 &Color, f32 Specular, f32 IndexOfRefraction, const v3 &Emissive, scalar_sphere *Sphere) {
     Sphere->Position.x = Position.x * WorldScale;
     Sphere->Position.y = Position.y * WorldScale;
@@ -96,7 +96,7 @@ static inline void InitRandomizedSphereScene(scene *Scene) {
 	Scene->Materials.Data = RandomizedMaterials;
 	Scene->Materials.Count = array_len(RandomizedMaterials);
 
-    Scene->DefaultDistanceFromLookAt = 48.0f;
+    Scene->DefaultDistanceFromLookAt = 48.0f * WorldScale;
     Scene->DefaultXAngle = (PI32 * 2.65f) / 2.0;
 
     u32_random_state RandomState = { 0x29D7A0A514F22432LLU };
@@ -163,9 +163,9 @@ static inline void InitRGBSphereScene(scene *Scene) {
 	Scene->SIMDSpheres.Count = array_len(RGBSIMDSpheres);
 	Scene->Materials.Data = RGBMaterials;
 	Scene->Materials.Count = array_len(RGBMaterials);
-    Scene->DefaultDistanceFromLookAt = 16.0f;
+    Scene->DefaultDistanceFromLookAt = 16.0f * WorldScale;
     Scene->DefaultXAngle = PI32 / 3.0;
-    Scene->DefaultYHeight = 4.0f;
+    Scene->DefaultYHeight = 4.0f * WorldScale;
 
     CreateScalarSphere(v3(0.0f, -256 - 2.0f, -15.0f), 256.0f, v3(0.2f), 0.0f, 0.0f, 0.0f, RGBScalarSpheres + 0);
     CreateScalarSphere(v3(0.0f, 0, -10.0f), 2.0f, v3(1.0f), 0.0f, 1.5f, 0.0f, RGBScalarSpheres + 1);
@@ -190,9 +190,9 @@ static inline void InitRTWeekendSphereScene(scene *Scene) {
 	Scene->Materials.Count = array_len(RTWeekendMaterials);
 	Scene->UseSkyColor = true;
 
-    Scene->DefaultDistanceFromLookAt = 12.0f;
+    Scene->DefaultDistanceFromLookAt = 12.0f * WorldScale;
     Scene->DefaultXAngle = PI32 / 8;
-    Scene->DefaultYHeight = 2.0f;
+    Scene->DefaultYHeight = 2.0f * WorldScale;
 
 	u32 Index = 0;
 	CreateScalarSphere(v3(0, -1000, 0), 1000, v3(0.5), 0.0, 0.0, v3(0.0), RTWeekendSpheres + Index);
@@ -209,37 +209,45 @@ static inline void InitRTWeekendSphereScene(scene *Scene) {
 	for (s32 i = -11; i < 11; ++i) {
 		for (s32 j = -11; j < 11; ++j) {
 			f32 M = RandomState.RandomFloat(0.0, 1.0);
+			bool IntersectionTest1;
+			bool IntersectionTest2;
+			bool IntersectionTest3;
 			v3 Center;
-			Center.x = i + RandomState.RandomFloat();
-			Center.y = 0.2;
-			Center.z = j + RandomState.RandomFloat();
-			if (v3::Length(Center - v3(4, 0.2, 0)) > 0.9) {
-				v3 Color = 0.0f;
-				v3 Emissive = 0.0f;
-				f32 Radius = 0.2f;
-				f32 Specular = 0.0f;
-				f32 IndexOfRefraction = 0.0f;
 
-				if (M < 0.8) {
-					Color = v3(
-						RandomState.RandomFloat(0.0, 1.0),
-						RandomState.RandomFloat(0.0, 1.0),
-						RandomState.RandomFloat(0.0, 1.0)
-					);
-				} else if (M < 0.95) {
-					Color = v3(
-						RandomState.RandomFloat(0.0, 1.0),
-						RandomState.RandomFloat(0.0, 1.0),
-						RandomState.RandomFloat(0.0, 1.0)
-					);
-					Specular = RandomState.RandomFloat(0.5, 1.0);
-				} else {
-					Color = 1.0f;
-					IndexOfRefraction = 1.5f;
-				}
-				CreateScalarSphere(Center, Radius, Color, Specular, IndexOfRefraction, Emissive, RTWeekendSpheres + Index);
-				Index += 1;
+			do {
+				Center.x = i + RandomState.RandomFloat();
+				Center.y = 0.2;
+				Center.z = j + RandomState.RandomFloat();
+				IntersectionTest1 = v3::Length(Center - v3(4, 0.2, 0)) > 0.9;
+				IntersectionTest2 = v3::Length(Center - v3(0, 0.2, 0)) > 0.9;
+				IntersectionTest3 = v3::Length(Center - v3(-4, 0.2, 0)) > 0.9;
+			} while (!IntersectionTest1 || !IntersectionTest2 || !IntersectionTest3);
+
+			v3 Color = 0.0f;
+			v3 Emissive = 0.0f;
+			f32 Radius = 0.2f;
+			f32 Specular = 0.0f;
+			f32 IndexOfRefraction = 0.0f;
+
+			if (M < 0.8) {
+				Color = v3(
+					RandomState.RandomFloat(0.0, 1.0),
+					RandomState.RandomFloat(0.0, 1.0),
+					RandomState.RandomFloat(0.0, 1.0)
+				);
+			} else if (M < 0.95) {
+				Color = v3(
+					RandomState.RandomFloat(0.0, 1.0),
+					RandomState.RandomFloat(0.0, 1.0),
+					RandomState.RandomFloat(0.0, 1.0)
+				);
+				Specular = RandomState.RandomFloat(0.5, 1.0);
+			} else {
+				Color = 1.0f;
+				IndexOfRefraction = 1.5f;
 			}
+			CreateScalarSphere(Center, Radius, Color, Specular, IndexOfRefraction, Emissive, RTWeekendSpheres + Index);
+			Index += 1;
 		}
 	}
 
@@ -708,7 +716,7 @@ bool OnRender(const image &Image, render_params RenderParams, u64 *OutTotalRaysC
     const v3 LookAt = Scenes[SceneIndex].LookAt;
 
     {
-        constexpr f32 MovementSpeed = 1.0f;
+        constexpr f32 MovementSpeed = 1.0f * WorldScale;
         if (IsDown(key::W) || IsDown(key::ArrowUp)) {
             DistanceFromLookAt -= MovementSpeed;
             Moved = true;
@@ -718,11 +726,11 @@ bool OnRender(const image &Image, render_params RenderParams, u64 *OutTotalRaysC
             Moved = true;
         }
         if (IsDown(key::D) || IsDown(key::ArrowRight)) {
-            XAngle -= MovementSpeed / 16.0f;
+            XAngle -= 1.0f / 16.0f;
             Moved = true;
         }
         if (IsDown(key::A) || IsDown(key::ArrowLeft)) {
-            XAngle += MovementSpeed / 16.0f;
+            XAngle += 1.0f / 16.0f;
             Moved = true;
         }
         if (IsDown(key::Space)) {
@@ -746,8 +754,8 @@ bool OnRender(const image &Image, render_params RenderParams, u64 *OutTotalRaysC
         if (XAngle < -(PI32 * 2.0f)) {
             XAngle += PI32 * 4.0f;
         }
-        if (DistanceFromLookAt < 0.5f) {
-            DistanceFromLookAt = 0.5f;
+        if (DistanceFromLookAt < 0.5f * WorldScale) {
+            DistanceFromLookAt = 0.5f * WorldScale;
         }
         if (YHeight > DistanceFromLookAt) {
             YHeight = DistanceFromLookAt;

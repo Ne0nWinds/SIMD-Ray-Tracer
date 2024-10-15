@@ -54,11 +54,16 @@ static u32 SceneIndex = -1;
 static scene Scenes[3] = { };
 
 static constexpr f32 WorldScale = 1.0 / 16.0f;
-constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v3 &Color, f32 Specular, f32 IndexOfRefraction, const v3 &Emissive, scalar_sphere *Sphere) {
-    Sphere->Position.x = Position.x * WorldScale;
-    Sphere->Position.y = Position.y * WorldScale;
-    Sphere->Position.z = Position.z * WorldScale;
-    Sphere->Radius = Radius * WorldScale;
+constexpr inline void CreateScalarSphere(const v3 &Position, f32 Radius, const v3 &Color, f32 Specular, f32 IndexOfRefraction, const v3 &Emissive, scalar_sphere *Sphere, bool ApplyWorldScale = true) {
+	if (ApplyWorldScale) {
+		Sphere->Position.x = Position.x * WorldScale;
+		Sphere->Position.y = Position.y * WorldScale;
+		Sphere->Position.z = Position.z * WorldScale;
+		Sphere->Radius = Radius * WorldScale;
+	} else {
+		Sphere->Position = Position;
+		Sphere->Radius = Radius;
+	}
     Sphere->Material.Color = Color;
     Sphere->Material.Specular = Specular;
     Sphere->Material.Emissive = Emissive;
@@ -127,9 +132,9 @@ static inline void InitRandomizedSphereScene(scene *Scene) {
 	
 	f32 Radius = RandomState.RandomFloat(2.0f, 8.0f);
 	const material &M = Materials[0];
-	CreateScalarSphere(v3(1.0, 0.0, 0.0), Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + 0);
-	CreateScalarSphere(v3(8.0, -1.0, 8.0), Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + 1);
-	CreateScalarSphere(v3(-20.0, -4.0, -20.0), Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + 2);
+	CreateScalarSphere(v3(1.0, 0.0, 0.0), Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + 0, false);
+	CreateScalarSphere(v3(8.0, -1.0, 8.0), Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + 1, false);
+	CreateScalarSphere(v3(-20.0, -4.0, -20.0), Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + 2, false);
 
     for (u32 i = 3; i < Length; ++i) {
         v3 Vector = 0.0f;
@@ -146,12 +151,19 @@ static inline void InitRandomizedSphereScene(scene *Scene) {
 		v3 Position = P + NormalizedVector * (RandomState.RandomFloat(1.0, 8.0) + Radius + R);
 
 		const material &M = Materials[i % array_len(Materials)];
-        CreateScalarSphere(Position, Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + i);
+        CreateScalarSphere(Position, Radius, M.Color, M.Specular, M.IndexOfRefraction, M.Emissive, RandomizedScalarSpheres + i, false);
     }
+	for (u32 i = 0; i < array_len(RandomizedScalarSpheres); ++i) {
+		scalar_sphere &S = RandomizedScalarSpheres[i];
+		S.Radius *= WorldScale;
+		S.Position.x *= WorldScale;
+		S.Position.y *= WorldScale;
+		S.Position.z *= WorldScale;
+	}
 
 	ConvertScalarSpheresToSIMDSpheres(Scene);
 
-	Scene->LookAt = v3(2.0, 0.0, 2.0);
+	Scene->LookAt = v3(2.0, 0.0, 2.0) * WorldScale;
 }
 static scalar_sphere RGBScalarSpheres[5];
 static sphere_group RGBSIMDSpheres[(array_len(RGBScalarSpheres) + (SIMD_WIDTH - 1)) / SIMD_WIDTH];

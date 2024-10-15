@@ -25,9 +25,6 @@ static u32 GLVertexShader;
 static u32 GLFragmentShader;
 static u32 GLProgram;
 
-static u64 KeyState[2] = {0};
-static u64 PrevKeyState[2] = {0};
-
 memory_arena AllocateArenaFromOS(u32 Size, u64 StartingAddress) {
 	(void)StartingAddress;
 
@@ -175,7 +172,6 @@ static void InitOSProperties() {
 	NumberOfProcessors = emscripten_navigator_hardware_concurrency();
 	Temp = AllocateArenaFromOS(MB(256));
 }
-
 
 static EM_BOOL RequestAnimationFrameCallback(double Time, void *) {
 
@@ -838,7 +834,15 @@ int main() {
 			enableSIMDElement.onchange = (e) => {
 				HEAP32[$3 >> 2] = enableSIMDElement.checked;
 			};
-		}, &ActiveThreadCount, &PreviousThreadCountValue, &RenderScale, &EnableSIMD);
+
+			const canvasElement = document.getElementById("canvas");
+			canvas.onblur = (e) => {
+				HEAP32[($4 >> 2) + 0] = 0;
+				HEAP32[($4 >> 2) + 1] = 0;
+				HEAP32[($5 >> 2) + 0] = 0;
+				HEAP32[($5 >> 2) + 1] = 0;
+			}
+		}, &ActiveThreadCount, &PreviousThreadCountValue, &RenderScale, &EnableSIMD, &KeyboardState, &PreviousKeyboardState);
 	}
 	CalculateCanvasWidthAndHeight();
 }

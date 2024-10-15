@@ -1,7 +1,5 @@
 # SIMD Ray Tracer
-This is the reference code base for SIMD: A practical guide There are currently two branches:
-- `master`: Contains a basic ray tracer loosely based on Ray Tracing in One Weekend that's optimized with SIMD and multi-threading that will compile for SSE2, AVX2, and WASM
-- `SIMD_Article`: A stripped-down version of the codebase as shown in the article
+This is a brute-force ray tracer optimized with SIMD and multi-threading
 
 ## Building for Windows:
 ```ps
@@ -14,4 +12,4 @@ The `.exe` file will show up in `.\build\win32\`
 .\wasm\compile.ps1
 ```
 
-The project can be run by creating a local server in `.\build\wasm`
+The project can be run by [creating a local server](https://github.com/Ne0nWinds/Basic-File-Server) in `.\build\wasm`

@@ -2,6 +2,7 @@
 This is a brute-force ray tracer optimized with SIMD and multi-threading
 
 ## Building for Windows:
+This Win32 version will only from [this commit](2a18de811a183a9c76aebd0279941832a39032f1) and earlier
 ```ps
 .\win32\compile.ps1
 ```
